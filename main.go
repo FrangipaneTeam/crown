@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/FrangipaneTeam/crown/handlers"
 	"github.com/FrangipaneTeam/crown/pkg/config"
 	"github.com/gregjones/httpcache"
 	"github.com/palantir/go-githubapp/githubapp"
@@ -37,12 +38,20 @@ func main() {
 		panic(err)
 	}
 
-	prCommentHandler := &PRCommentHandler{
+	IssuesHandler := &handlers.IssuesHandler{
 		ClientCreator: cc,
-		preamble:      config.AppConfig.PullRequestPreamble,
 	}
 
-	webhookHandler := githubapp.NewDefaultEventDispatcher(config.Github, prCommentHandler)
+	IssueCommentHandler := &handlers.IssueCommentHandler{
+		ClientCreator: cc,
+	}
+
+	// prCommentHandler := &PRCommentHandler{
+	// 	ClientCreator: cc,
+	// 	preamble:      config.AppConfig.PullRequestPreamble,
+	// }
+
+	webhookHandler := githubapp.NewDefaultEventDispatcher(config.Github, IssuesHandler, IssueCommentHandler)
 
 	http.Handle(githubapp.DefaultWebhookRoute, webhookHandler)
 
