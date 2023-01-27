@@ -18,12 +18,15 @@ type GHClient struct {
 	context   context.Context
 	client    *github.Client
 	repo      *github.Repository
-	issue     *github.Issue
+
+	issue       *github.Issue
+	pullRequest *github.PullRequest
 
 	repoOwner     string
 	repoName      string
 	frangipaneOrg string
 	author        string
+	issueNumber   int
 
 	Logger         zerolog.Logger
 	installationID int64
@@ -39,12 +42,21 @@ func NewGHClient(ctx context.Context, ghapp githubapp.ClientCreator, event inter
 			repo:           event.GetRepo(),
 			issue:          event.GetIssue(),
 			installationID: githubapp.GetInstallationIDFromEvent(&event),
+			issueNumber:    event.GetIssue().GetNumber(),
 		}
 	case github.IssueCommentEvent:
 		ghClient = &GHClient{
 			repo:           event.GetRepo(),
 			issue:          event.GetIssue(),
 			installationID: githubapp.GetInstallationIDFromEvent(&event),
+			issueNumber:    event.GetIssue().GetNumber(),
+		}
+	case github.PullRequestEvent:
+		ghClient = &GHClient{
+			repo:           event.GetRepo(),
+			pullRequest:    event.GetPullRequest(),
+			installationID: githubapp.GetInstallationIDFromEvent(&event),
+			issueNumber:    event.GetPullRequest().GetNumber(),
 		}
 	default:
 		return nil, errors.New("event not supported")
@@ -112,9 +124,19 @@ func (g *GHClient) GetIssue() *github.Issue {
 	return g.issue
 }
 
+// GetPullRequest returns the pull request.
+func (g *GHClient) GetPullRequest() *github.PullRequest {
+	return g.pullRequest
+}
+
 // GetOrg returns the organization.
 func (g *GHClient) GetOrg() string {
 	return g.frangipaneOrg
+}
+
+// GetIssueNumber returns the issue number.
+func (g *GHClient) GetIssueNumber() int {
+	return g.issueNumber
 }
 
 // IsInFrangipaneOrg returns true if the user is in the FrangipaneTeam organization.
