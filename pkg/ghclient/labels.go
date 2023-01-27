@@ -1,45 +1,84 @@
 package ghclient
 
-import "github.com/google/go-github/v47/github"
+import (
+	"errors"
+	"regexp"
+
+	"github.com/google/go-github/v47/github"
+)
+
+/*
+
+	> PULL REQUEST
+
+*/
 
 // SearchLabelsInIssue searches for labels in the issue.
-func (g *GHClient) SearchLabelInIssue(pattern string) ([]*github.LabelResult, error) {
-	labels, _, err := g.client.Search.Labels(g.context, *g.repo.ID, pattern, &github.SearchOptions{})
+// pattern is a regular expression.
+func (g *GHClient) SearchLabelInIssue(pattern string) ([]*github.Label, error) {
+	labels, _, err := g.client.Issues.ListLabelsByIssue(g.context, g.repoOwner, g.repoName, g.GetIssueNumber(), &github.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
 
-	var found []*github.LabelResult
-	for _, label := range labels.Labels {
-		if label.GetName() == pattern {
-			found = append(found, label)
+	g.Logger.Debug().Interface("labels", labels).Msgf("Searching for labels matching %s", pattern)
+
+	var foundLabels []*github.Label
+	for _, label := range labels {
+		if regexp.MustCompile(pattern).MatchString(label.GetName()) {
+			foundLabels = append(foundLabels, label)
 		}
 	}
 
-	return found, nil
+	return foundLabels, nil
+
 }
 
-// ExistsLabel returns true if the label exists.
-func (g *GHClient) ExistsLabel(label string) (bool, error) {
-	_, _, err := g.client.Issues.GetLabel(g.context, g.repoOwner, g.repoName, label)
-	if err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
-// GetLabel returns the label with the given name.
-func (g *GHClient) GetLabel(label string) (x *github.Label, err error) {
-	x, _, err = g.client.Issues.GetLabel(g.context, g.repoOwner, g.repoName, label)
+// GetLabelsInIssue returns the labels of the issue.
+func (g *GHClient) GetLabelsInIssue() ([]*github.Label, error) {
+	labels, _, err := g.client.Issues.ListLabelsByIssue(g.context, g.repoOwner, g.repoName, g.GetIssueNumber(), &github.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
-	return x, nil
+
+	return labels, nil
+}
+
+// ExistsLabel returns true if the label exists.
+func (g *GHClient) ExistsLabelInIssue(label string) (bool, error) {
+	labels, err := g.GetLabelsInIssue()
+	if err != nil {
+		return false, err
+	}
+
+	for _, l := range labels {
+		if l.GetName() == label {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// GetLabelInIssue returns the label with the given name.
+func (g *GHClient) GetLabelInIssue(label string) (x *github.Label, err error) {
+	labels, err := g.GetLabelsInIssue()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, l := range labels {
+		if l.GetName() == label {
+			return l, nil
+		}
+	}
+
+	return nil, errors.New("label not found")
 }
 
 // AddLabelToIssue adds a label to the issue.
 func (g *GHClient) AddLabelToIssue(label string) error {
-	_, _, err := g.client.Issues.AddLabelsToIssue(g.context, g.repoOwner, g.repoName, g.issue.GetNumber(), []string{label})
+	_, _, err := g.client.Issues.AddLabelsToIssue(g.context, g.repoOwner, g.repoName, g.GetIssueNumber(), []string{label})
 	if err != nil {
 		return err
 	}
@@ -48,7 +87,7 @@ func (g *GHClient) AddLabelToIssue(label string) error {
 
 // AddLabelsToIssue adds labels to the issue.
 func (g *GHClient) AddLabelsToIssue(labels []string) error {
-	_, _, err := g.client.Issues.AddLabelsToIssue(g.context, g.repoOwner, g.repoName, g.issue.GetNumber(), labels)
+	_, _, err := g.client.Issues.AddLabelsToIssue(g.context, g.repoOwner, g.repoName, g.GetIssueNumber(), labels)
 	if err != nil {
 		return err
 	}
@@ -57,7 +96,7 @@ func (g *GHClient) AddLabelsToIssue(labels []string) error {
 
 // RemoveLabelForIssue removes a label from the issue.
 func (g *GHClient) RemoveLabelForIssue(label string) error {
-	_, err := g.client.Issues.RemoveLabelForIssue(g.context, g.repoOwner, g.repoName, g.issue.GetNumber(), label)
+	_, err := g.client.Issues.RemoveLabelForIssue(g.context, g.repoOwner, g.repoName, g.GetIssueNumber(), label)
 	if err != nil {
 		return err
 	}
@@ -74,6 +113,25 @@ func (g *GHClient) RemoveLabelsForIssue(labels []string) error {
 		}
 	}
 	return nil
+}
+
+// GetLabels returns the labels of the repository.
+func (g *GHClient) GetLabels() ([]*github.Label, error) {
+	labels, _, err := g.client.Issues.ListLabels(g.context, g.repoOwner, g.repoName, &github.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	return labels, nil
+}
+
+// GetLabel returns the label with the given name of the repository.
+func (g *GHClient) GetLabel(label string) (x *github.Label, err error) {
+	x, _, err = g.client.Issues.GetLabel(g.context, g.repoOwner, g.repoName, label)
+	if err != nil {
+		return nil, err
+	}
+	return x, nil
 }
 
 // CreateLabel creates a label.

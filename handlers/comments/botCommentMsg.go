@@ -12,6 +12,7 @@ var (
 		IDIssuesLabelNotExists: "The label `%s` not existing in this repository. \nif you are an administrator you can write a comment with the command `/label:add category/%s` to automatically create the label",
 		IDPRTitleInvalid:       "The pull request title `%s` is not conventional commit format.\nPlease follow this format : `type(scope): subject` or `type: subject`\n\nFor more information about conventional commit, please visit [conventionalcommits.org](https://www.conventionalcommits.org/en/v1.0.0/)",
 		IDPRCommitInvalid:      "The commit message `%s` is not conventional commit format.\nPlease follow this format : `type(scope): subject` or `type: subject`\n\nFor more information about conventional commit, please visit [conventionalcommits.org](https://www.conventionalcommits.org/en/v1.0.0/)",
+		IDPRTypeInvalid:        "The pull request type `%s` is not conventional commit format.\nPlease follow this format : `type(scope): subject` or `type: subject`\n\nFor more information about conventional commit, please visit [conventionalcommits.org](https://www.conventionalcommits.org/en/v1.0.0/)",
 	}
 
 	issuesCommentsExtra = map[BotCommentExtra]commentExtra{

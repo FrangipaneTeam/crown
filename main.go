@@ -38,20 +38,19 @@ func main() {
 		panic(err)
 	}
 
-	IssuesHandler := &handlers.IssuesHandler{
-		ClientCreator: cc,
-	}
-
-	IssueCommentHandler := &handlers.IssueCommentHandler{
-		ClientCreator: cc,
-	}
-
-	// prCommentHandler := &PRCommentHandler{
-	// 	ClientCreator: cc,
-	// 	preamble:      config.AppConfig.PullRequestPreamble,
-	// }
-
-	webhookHandler := githubapp.NewDefaultEventDispatcher(config.Github, IssuesHandler, IssueCommentHandler)
+	webhookHandler := githubapp.NewEventDispatcher(
+		[]githubapp.EventHandler{
+			&handlers.PullRequestHandler{ClientCreator: cc},
+			&handlers.IssueCommentHandler{ClientCreator: cc},
+			&handlers.IssuesHandler{ClientCreator: cc},
+		},
+		config.Github.App.WebhookSecret,
+		githubapp.WithScheduler(
+			githubapp.QueueAsyncScheduler(
+				100, 10,
+			),
+		),
+	)
 
 	http.Handle(githubapp.DefaultWebhookRoute, webhookHandler)
 

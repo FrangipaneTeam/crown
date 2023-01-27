@@ -10,6 +10,7 @@ const (
 	IDIssuesLabelNotExists
 	IDPRTitleInvalid
 	IDPRCommitInvalid
+	IDPRTypeInvalid
 	// ! Always add new IDs at the END of the list
 )
 
