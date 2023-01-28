@@ -12,6 +12,11 @@ import (
 	"github.com/palantir/go-githubapp/githubapp"
 	"github.com/rcrowley/go-metrics"
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+)
+
+var (
+	AppID int64
 )
 
 func main() {
@@ -20,7 +25,8 @@ func main() {
 		panic(err)
 	}
 
-	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
+	// logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
+	logger := log.Output(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339})
 	zerolog.DefaultContextLogger = &logger
 
 	metricsRegistry := metrics.DefaultRegistry

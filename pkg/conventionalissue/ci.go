@@ -4,6 +4,8 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+
+	"github.com/FrangipaneTeam/crown/pkg/common"
 )
 
 type IssueTitle struct {
@@ -11,20 +13,48 @@ type IssueTitle struct {
 }
 
 // Parse parse the message of an issue and returns a conventional issue.
-// Pattern is: [<scope>] <message>
-func Parse(msg string) (*IssueTitle, error) {
+// Pattern is: [<SCOPE>] <message>
+func Parse(titleBody string) (*IssueTitle, error) {
+	var re = regexp.MustCompile(`(?m)\[(?P<scope>[A-Z]+)\/?([A-Z]+)?\]\s+(?P<value>\S+)$`)
 
-	x := regexp.MustCompile(`\[([a-zA-Z]+)\/?([a-zA-Z]+)?\](.*)`)
-	matches := x.FindStringSubmatch(msg)
+	match := re.FindString(titleBody)
+	m := common.ReSubMatchMap(re, match)
+	if len(m) == 0 {
+		return nil, errors.New("invalid issue format. Format is \"[<SCOPE>] <message>\"")
+	}
 
-	if len(matches) == 0 || len(matches) < 3 || matches[0] == "" {
-		return nil, errors.New("invalid issue format. Format is \"[<scope>] <message>\"")
+	if m["scope"] == "" || m["value"] == "" {
+		return nil, errors.New("invalid issue format. Format is \"[<SCOPE>] <message>\"")
 	}
 
 	return &IssueTitle{
-		scope:   matches[1],
-		message: matches[2],
+		scope:   m["scope"],
+		message: m["value"],
 	}, nil
+
+	// match := re.FindStringSubmatch(titleBody)
+	// if len(match) == 0 {
+	// 	return nil, errors.New("invalid issue format. Format is \"[<SCOPE>] <message>\"")
+	// }
+	// subMatchMap := make(map[string]string)
+	// for i, name := range re.SubexpNames() {
+	// 	if i != 0 {
+	// 		subMatchMap[name] = match[i]
+	// 	}
+	// }
+
+	// if len(subMatchMap) == 0 {
+	// 	return nil, errors.New("invalid issue format. Format is \"[<SCOPE>] <message>\"")
+	// }
+
+	// if subMatchMap["scope"] == "" || subMatchMap["value"] == "" {
+	// 	return nil, errors.New("invalid issue format. Format is \"[<SCOPE>] <message>\"")
+	// }
+
+	// return &IssueTitle{
+	// 	scope:   subMatchMap["scope"],
+	// 	message: subMatchMap["value"],
+	// }, nil
 
 }
 

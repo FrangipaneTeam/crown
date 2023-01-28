@@ -10,7 +10,7 @@ const (
 	IDIssuesLabelNotExists
 	IDPRTitleInvalid
 	IDPRCommitInvalid
-	IDPRTypeInvalid
+	IDPRSizeTooBig
 	// ! Always add new IDs at the END of the list
 )
 
@@ -29,5 +29,15 @@ func Int64Value(v *int64) int64 {
 
 // IsValid returns true if the string passed in is equal to BotCommentID
 func (c BotCommentID) IsValid(id string) bool {
-	return fmt.Sprint(c) == id
+	return id == c.IdString()
+}
+
+// IdString return string value of BotCommentID
+func (c BotCommentID) IdString() string {
+	return fmt.Sprint(c)
+}
+
+// Id return int value of BotCommentID
+func (c BotCommentID) Id() int {
+	return int(c)
 }

@@ -8,6 +8,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+var (
+	AppID int64
+)
+
 type Config struct {
 	Server HTTPConfig       `yaml:"server"`
 	Github githubapp.Config `yaml:"github"`
@@ -35,6 +39,8 @@ func ReadConfig(path string) (*Config, error) {
 	if err := yaml.Unmarshal(bytes, &c); err != nil {
 		return nil, errors.Wrap(err, "failed parsing configuration file")
 	}
+
+	AppID = c.Github.App.IntegrationID
 
 	return &c, nil
 }
