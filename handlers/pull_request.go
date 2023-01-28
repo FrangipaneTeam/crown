@@ -5,9 +5,13 @@ import (
 	"encoding/json"
 
 	"github.com/FrangipaneTeam/crown/handlers/comments"
+	"github.com/FrangipaneTeam/crown/handlers/status"
+	"github.com/FrangipaneTeam/crown/pkg/config"
 	"github.com/FrangipaneTeam/crown/pkg/conventionalcommit"
+	"github.com/FrangipaneTeam/crown/pkg/conventionalsizepr"
 	"github.com/FrangipaneTeam/crown/pkg/ghclient"
 	"github.com/FrangipaneTeam/crown/pkg/labeler"
+	"github.com/FrangipaneTeam/crown/pkg/statustype"
 	"github.com/azrod/common-go"
 	"github.com/google/go-github/v47/github"
 	"github.com/palantir/go-githubapp/githubapp"
@@ -33,12 +37,30 @@ func (h *PullRequestHandler) Handle(ctx context.Context, eventType, deliveryID s
 		return errors.Wrap(err, "failed to parse issue comment event payload")
 	}
 
-	labelsCategory := make([]string, 0)
-	labelsType := make([]string, 0)
-
 	ghc, err := ghclient.NewGHClient(ctx, h, event)
 	if err != nil {
 		return errors.Wrap(err, "failed to create github client for issue comment event")
+	}
+
+	if err = ghc.BranchRequiredStatusChecks([]*github.RequiredStatusCheck{
+		{
+			Context: status.PR_Check_Title.String(),
+			AppID:   github.Int64(config.AppID),
+		},
+		{
+			Context: status.PR_Check_SizeChanges.String(),
+			AppID:   github.Int64(config.AppID),
+		},
+		{
+			Context: status.PR_Labeler.String(),
+			AppID:   github.Int64(config.AppID),
+		},
+		{
+			Context: status.PR_Check_Commits.String(),
+			AppID:   github.Int64(config.AppID),
+		},
+	}); err != nil {
+		ghc.Logger.Error().Err(err).Msg("Failed to set branch protection")
 	}
 
 	ghc.Logger.Debug().Msgf("Event action is %s in Handle PullRequest", event.GetAction())
@@ -46,31 +68,62 @@ func (h *PullRequestHandler) Handle(ctx context.Context, eventType, deliveryID s
 	switch event.GetAction() {
 	case "opened", "edited", "synchronize":
 
-		// * Check if the issue have a conventional issue title
+		labelsCategory := make([]string, 0)
+		labelsType := make([]string, 0)
+		labelsSize := make([]string, 0)
 
-		// ParseIssue
+		commitSHA := event.GetPullRequest().GetHead().GetSHA()
+		if commitSHA == "" {
+			ghc.Logger.Error().Msg("Failed to get commit SHA")
+			return nil
+		}
+
+		// * Init status
+		// At this instant, All status are pending
+		PR_Check_Title := status.NewStatus(ghc, status.PR_Check_Title, commitSHA)
+		PR_Check_commits := status.NewStatus(ghc, status.PR_Check_Commits, commitSHA)
+		PR_Labeler := status.NewStatus(ghc, status.PR_Labeler, commitSHA)
+		PR_Check_SizeChanges := status.NewStatus(ghc, status.PR_Check_SizeChanges, commitSHA)
+
+		// * Check if the PullRequest have a conventional commit title format
+		// ? ParseTitle
+		MsgPRTitleInvalid := comments.NewCommentMsg(ghc, comments.IDPRTitleInvalid, comments.PRTitleInvalidValues{
+			Title: ghc.GetPullRequest().GetTitle(),
+		})
+		if MsgPRTitleInvalid == nil {
+			ghc.Logger.Error().Msg("Failed to create comment")
+			return nil
+		}
 		PrTitle, err := conventionalcommit.ParseCommit(ghc.GetPullRequest().GetTitle())
 		if err != nil {
-			ghc.Logger.Debug().Msg("PullRequest title is not conventional commit format")
-			comments.EditIssueComment(ghc, comments.IDPRTitleInvalid, ghc.GetPullRequest().GetTitle())
+			ghc.Logger.Debug().Msg("Error while parsing PR title")
+			if err := PR_Check_Title.SetState(statustype.Failure); err != nil {
+				ghc.Logger.Error().Err(err).Msg("Failed to set status")
+			}
+			MsgPRTitleInvalid.EditIssueComment()
 		} else {
 
 			// Scope
-			_, err = ghc.GetLabel(labeler.FormatedLabelScope(PrTitle.Scope()))
-			if err != nil {
-				comments.EditIssueComment(ghc, comments.IDPRTitleInvalid, PrTitle.GetScope())
-			} else {
-				labelsCategory = append(labelsCategory, labeler.FormatedLabelScope(PrTitle.Scope()))
+			if PrTitle.Scope() != "" {
+				_, err = ghc.GetLabel(labeler.FormatedLabelScope(PrTitle.Scope()))
+				if err != nil {
+					PR_Check_Title.SetState(statustype.Failure)
+					MsgPRTitleInvalid.EditIssueComment()
+				} else {
+					labelsCategory = append(labelsCategory, labeler.FormatedLabelScope(PrTitle.Scope()))
+				}
 			}
 
 			// Type
 			if v, ok := labeler.FindLabelerType(PrTitle); !ok {
-				comments.EditIssueComment(ghc, comments.IDPRTypeInvalid, v.GetShortName())
+				PR_Check_Title.SetState(statustype.Failure)
+				MsgPRTitleInvalid.EditIssueComment()
 			} else {
 				_, err = ghc.GetLabel(v.GetLongName())
 				if err != nil {
 					err = ghc.CreateLabel(v.GitHubLabel())
 					if err != nil {
+						PR_Check_Title.SetState(statustype.Failure)
 						ghc.Logger.Error().Err(err).Msg("Failed to create label")
 					} else {
 						labelsType = append(labelsType, v.GetLongName())
@@ -86,6 +139,7 @@ func (h *PullRequestHandler) Handle(ctx context.Context, eventType, deliveryID s
 				if err != nil {
 					err = ghc.CreateLabel(labeler.BreakingChange.GithubLabel())
 					if err != nil {
+						PR_Check_Title.SetState(statustype.Failure)
 						ghc.Logger.Error().Err(err).Msg("Failed to create label")
 					} else {
 						labelsType = append(labelsType, labeler.BreakingChange.GetLongName())
@@ -94,43 +148,92 @@ func (h *PullRequestHandler) Handle(ctx context.Context, eventType, deliveryID s
 					labelsType = append(labelsType, labeler.BreakingChange.GetLongName())
 				}
 			}
+
+			if err := PR_Check_Title.IsSuccess(); err != nil {
+				ghc.Logger.Error().Err(err).Msg("Failed to set status")
+			}
 		}
 		// End of check PR title
 
 		// * Check if the commits messages are conventional commit format
 
+		// ? ParseCommits
+
 		commits, err := ghc.GetCommits()
 		if err != nil {
+			PR_Check_commits.SetState(statustype.Failure)
 			ghc.Logger.Error().Err(err).Msg("Failed to get commits")
 		} else {
+
+			allCommitsSHA := make([]string, 0)
+
 			for _, commit := range commits {
+
+				MsgPRCommitInvalid := comments.NewCommentMsg(ghc, comments.IDPRCommitInvalid, comments.PRCommitInvalidValues{
+					CommitMsg: commit.GetCommit().GetMessage(),
+					CommitSHA: commit.GetSHA(),
+				})
+				if MsgPRCommitInvalid == nil {
+					ghc.Logger.Error().Msg("Failed to create comment")
+					continue
+				}
+
+				allCommitsSHA = append(allCommitsSHA, commit.GetSHA())
 
 				ghc.Logger.Debug().Msgf("Commit message is %s", commit.GetCommit().GetMessage())
 
 				cm, err := conventionalcommit.ParseCommit(commit.GetCommit().GetMessage())
 				if err != nil {
-					ghc.Logger.Debug().Msg("Commit message is not conventional commit format")
-					comments.CreateIssueComment(ghc, comments.IDPRCommitInvalid, commit.GetCommit().GetMessage())
+					ghc.Logger.Error().Str("message", commit.GetCommit().GetMessage()).Str("commitID", commit.GetSHA()).Msg("Commit message is not conventional commit format")
+					PR_Check_commits.SetState(statustype.Failure)
+					if err := MsgPRCommitInvalid.EditIssueComment(); err != nil {
+						ghc.Logger.Error().Err(err).Msg("Failed to edit issue comment")
+						continue
+					}
 				} else {
 
-					// Scope
-					_, err = ghc.GetLabel(labeler.FormatedLabelScope(cm.Scope()))
-					if err != nil {
-						comments.CreateIssueComment(ghc, comments.IDIssuesLabelNotExists, cm.GetScope())
-					} else {
-						if _, ok := common.Find(labelsCategory, labeler.FormatedLabelScope(cm.Scope())); !ok {
-							labelsCategory = append(labelsCategory, labeler.FormatedLabelScope(cm.Scope()))
-						}
+					// Remove issue comment if commit message is valid
+					if err := MsgPRCommitInvalid.RemoveIssueComment(); err != nil {
+						ghc.Logger.Error().Err(err).Msg("Failed to remove issue comment")
+						continue
 					}
 
+					// Scope
+					if cm.Scope() != "" {
+						MsgPRIssuesLabelNotExists := comments.NewCommentMsg(ghc, comments.IDIssuesLabelNotExists, comments.IssuesLabelNotExistsValues{
+							Label: labeler.FormatedLabelScope(cm.Scope()),
+						})
+						if MsgPRIssuesLabelNotExists == nil {
+							ghc.Logger.Error().Msg("Failed to create comment")
+							continue
+						}
+						_, err = ghc.GetLabel(labeler.FormatedLabelScope(cm.Scope()))
+						if err != nil {
+							PR_Labeler.SetState(statustype.Failure)
+							if eer := MsgPRIssuesLabelNotExists.EditIssueComment(); err != nil {
+								ghc.Logger.Error().Err(eer).Msg("Failed to edit issue comment")
+								continue
+							}
+						} else {
+							if _, ok := common.Find(labelsCategory, labeler.FormatedLabelScope(cm.Scope())); !ok {
+								labelsCategory = append(labelsCategory, labeler.FormatedLabelScope(cm.Scope()))
+							}
+						}
+					}
 					// Type
 					if v, ok := labeler.FindLabelerType(cm); !ok {
-						comments.CreateIssueComment(ghc, comments.IDPRTypeInvalid, v.GetShortName())
+						ghc.Logger.Error().Str("message", commit.GetCommit().GetMessage()).Str("commitID", commit.GetSHA()).Msg("Commit message is not conventional commit format")
+						PR_Check_commits.SetState(statustype.Failure)
+						if err := MsgPRCommitInvalid.EditIssueComment(); err != nil {
+							ghc.Logger.Error().Err(err).Msg("Failed to edit issue comment")
+							continue
+						}
 					} else {
 						_, err = ghc.GetLabel(v.GetLongName())
 						if err != nil {
 							err = ghc.CreateLabel(v.GitHubLabel())
 							if err != nil {
+								PR_Labeler.SetState(statustype.Failure)
 								ghc.Logger.Error().Err(err).Msg("Failed to create label")
 							} else {
 								labelsType = append(labelsType, v.GetLongName())
@@ -146,6 +249,7 @@ func (h *PullRequestHandler) Handle(ctx context.Context, eventType, deliveryID s
 						if err != nil {
 							err = ghc.CreateLabel(labeler.BreakingChange.GithubLabel())
 							if err != nil {
+								PR_Labeler.SetState(statustype.Failure)
 								ghc.Logger.Error().Err(err).Msg("Failed to create label")
 							} else {
 								labelsType = append(labelsType, labeler.BreakingChange.GetLongName())
@@ -155,35 +259,107 @@ func (h *PullRequestHandler) Handle(ctx context.Context, eventType, deliveryID s
 						}
 					}
 
+					if err := PR_Check_commits.IsSuccess(); err != nil {
+						ghc.Logger.Error().Err(err).Msg("Failed to set status")
+					}
+
+				}
+			}
+
+			cts, err := ghc.ListComments()
+			if err != nil {
+				ghc.Logger.Error().Err(err).Msg("Failed to get comments")
+			} else {
+				if len(cts) > 0 {
+					for _, comment := range cts {
+						if ok, value := comments.ExtraIssueComment(comment.GetBody(), comments.IDPRCommitInvalid, comments.ExtraBotID); ok && comments.IDPRCommitInvalid.IsValid(value) {
+							if ok, value := comments.ExtraIssueComment(comment.GetBody(), comments.IDPRCommitInvalid, comments.ExtraCommitID); ok {
+								if _, ok := common.Find(allCommitsSHA, value); !ok {
+									// Delete commit for invalid commit message with commitID has been deleted
+									ghc.DeleteComment(comment.GetID())
+								}
+							}
+						}
+					}
+				}
+			}
+
+		}
+
+		// * Calcul Additions and Deletions
+		size := conventionalsizepr.NewPRSize(event.PullRequest.GetAdditions(), event.PullRequest.GetDeletions())
+
+		// * Check if the PR is too big
+		MsgPRSizeTooBig := comments.NewCommentMsg(ghc, comments.IDPRSizeTooBig, nil)
+		if MsgPRSizeTooBig == nil {
+			ghc.Logger.Error().Msg("Failed to create comment message")
+			return nil
+		}
+
+		if size.IsTooBig() {
+			MsgPRSizeTooBig.CreateIssueComment()
+		} else {
+			MsgPRSizeTooBig.RemoveIssueComment()
+		}
+
+		l := labeler.FindLabelerSize(size.GetSize())
+		_, err = ghc.GetLabel(l.GetLongName())
+		if err != nil {
+			err = ghc.CreateLabel(l.GithubLabel())
+			if err != nil {
+				PR_Check_SizeChanges.SetState(statustype.Failure)
+				ghc.Logger.Error().Err(err).Msg("Failed to create label size")
+			} else {
+				labelsSize = append(labelsSize, l.GetLongName())
+			}
+		} else {
+			labelsSize = append(labelsSize, l.GetLongName())
+		}
+
+		if err := PR_Check_SizeChanges.IsSuccess(); err != nil {
+			ghc.Logger.Error().Err(err).Msg("Failed to set status")
+		}
+
+		o := make([]string, 0)
+		allLabels := append(labelsType, labelsCategory...)
+		allLabels = append(allLabels, labelsSize...)
+
+		for _, lbl := range event.PullRequest.Labels {
+			ghc.Logger.Debug().Msgf("Label is %s", lbl.GetName())
+			if _, ok := common.Find(allLabels, lbl.GetName()); !ok {
+				if err := ghc.RemoveLabelForIssue(lbl.GetName()); err != nil {
+					PR_Labeler.SetState(statustype.Failure)
+					ghc.Logger.Error().Err(err).Msg("Failed to remove label")
+				}
+			}
+			o = append(o, lbl.GetName())
+		}
+
+		for _, lbl := range allLabels {
+			if _, ok := common.Find(o, lbl); !ok {
+				if err := ghc.AddLabelToIssue(lbl); err != nil {
+					PR_Labeler.SetState(statustype.Failure)
+					ghc.Logger.Error().Err(err).Msg("Failed to add label")
 				}
 			}
 		}
 
-		// * Calcul Additions and Deletions
-		// * Check if the PR is too big
+		if err := PR_Labeler.IsSuccess(); err != nil {
+			ghc.Logger.Error().Err(err).Msg("Failed to set status")
+		}
+
+	case "labeled":
+
+		l := event.GetLabel()
+		MsgPRIssuesLabelNotExists := comments.NewCommentMsg(ghc, comments.IDIssuesLabelNotExists, comments.IssuesLabelNotExistsValues{
+			Label: l.GetName(),
+		})
+
+		// Remove comment if label added is in comment
+		MsgPRIssuesLabelNotExists.RemoveIssueComment()
 
 	default:
 		return nil
-	}
-
-	o := make([]string, 0)
-
-	allLabels := append(labelsType, labelsCategory...)
-
-	ghc.Logger.Debug().Msgf("Labels are %v", event.PullRequest.Labels)
-
-	for _, lbl := range event.PullRequest.Labels {
-		ghc.Logger.Debug().Msgf("Label is %s", lbl.GetName())
-		if _, ok := common.Find(allLabels, lbl.GetName()); !ok {
-			ghc.RemoveLabelForIssue(lbl.GetName())
-		}
-		o = append(o, lbl.GetName())
-	}
-
-	for _, lbl := range allLabels {
-		if _, ok := common.Find(o, lbl); !ok {
-			ghc.AddLabelToIssue(lbl)
-		}
 	}
 
 	return nil

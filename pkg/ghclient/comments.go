@@ -4,7 +4,7 @@ import "github.com/google/go-github/v47/github"
 
 // CreateComment creates a comment on the issue.
 func (g *GHClient) CreateComment(comment github.IssueComment) error {
-	_, _, err := g.client.Issues.CreateComment(g.context, g.repoOwner, g.repoName, g.issue.GetNumber(), &comment)
+	_, _, err := g.client.Issues.CreateComment(g.context, g.repoOwner, g.repoName, g.GetIssueNumber(), &comment)
 	if err != nil {
 		return err
 	}
@@ -14,7 +14,7 @@ func (g *GHClient) CreateComment(comment github.IssueComment) error {
 
 // ListComments lists all comments on the issue.
 func (g *GHClient) ListComments() ([]*github.IssueComment, error) {
-	comments, _, err := g.client.Issues.ListComments(g.context, g.repoOwner, g.repoName, g.issue.GetNumber(), nil)
+	comments, _, err := g.client.Issues.ListComments(g.context, g.repoOwner, g.repoName, g.GetIssueNumber(), nil)
 	if err != nil {
 		return nil, err
 	}
