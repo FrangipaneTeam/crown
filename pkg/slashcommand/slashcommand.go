@@ -1,7 +1,6 @@
 package slashcommand
 
 import (
-	"fmt"
 	"regexp"
 
 	"github.com/FrangipaneTeam/crown/pkg/ghclient"
@@ -34,9 +33,7 @@ type SlashCommand struct {
 
 // FindSlashCommand finds slash command in body string.
 func FindSlashCommand(body string, commentID, issueID int64) (bool, *SlashCommand) {
-	fmt.Println(body)
 	cmd := slashcommandRe.FindStringSubmatch(body)
-	fmt.Println(len(cmd))
 	if len(cmd) != 4 {
 		return false, nil
 	}

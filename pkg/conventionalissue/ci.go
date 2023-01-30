@@ -15,7 +15,7 @@ type IssueTitle struct {
 // Parse parse the message of an issue and returns a conventional issue.
 // Pattern is: [<SCOPE>] <message>
 func Parse(titleBody string) (*IssueTitle, error) {
-	var re = regexp.MustCompile(`(?m)\[(?P<scope>[A-Z]+)\/?([A-Z]+)?\]\s+(?P<value>\S+)$`)
+	var re = regexp.MustCompile(`(?m)\[(?P<scope>[A-Z]+)\/?([A-Z]+)?\]\s+(?P<value>[-a-zA-Z_():\s]+)$`)
 
 	match := re.FindString(titleBody)
 	m := common.ReSubMatchMap(re, match)
@@ -31,30 +31,6 @@ func Parse(titleBody string) (*IssueTitle, error) {
 		scope:   m["scope"],
 		message: m["value"],
 	}, nil
-
-	// match := re.FindStringSubmatch(titleBody)
-	// if len(match) == 0 {
-	// 	return nil, errors.New("invalid issue format. Format is \"[<SCOPE>] <message>\"")
-	// }
-	// subMatchMap := make(map[string]string)
-	// for i, name := range re.SubexpNames() {
-	// 	if i != 0 {
-	// 		subMatchMap[name] = match[i]
-	// 	}
-	// }
-
-	// if len(subMatchMap) == 0 {
-	// 	return nil, errors.New("invalid issue format. Format is \"[<SCOPE>] <message>\"")
-	// }
-
-	// if subMatchMap["scope"] == "" || subMatchMap["value"] == "" {
-	// 	return nil, errors.New("invalid issue format. Format is \"[<SCOPE>] <message>\"")
-	// }
-
-	// return &IssueTitle{
-	// 	scope:   subMatchMap["scope"],
-	// 	message: subMatchMap["value"],
-	// }, nil
 
 }
 

@@ -2,6 +2,7 @@ package comments
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/FrangipaneTeam/crown/pkg/ghclient"
 	"github.com/google/go-github/v47/github"
@@ -128,11 +129,14 @@ func NewCommentMsg(ghc *ghclient.GHClient, id BotCommentID, values interface{}) 
 				Body: x.createIssueMessage(),
 			}
 			if err := x.ghc.EditComment(commentID, prComment); err != nil {
+				if err.(*github.ErrorResponse).Response.StatusCode == http.StatusNotFound {
+					return x.CreateIssueComment()
+				}
 				x.ghc.Logger.Error().Err(err).Int64("commentID", commentID).Msg("Failed to edit comment on issue")
 				return err
 			}
 		} else {
-			x.CreateIssueComment()
+			return x.CreateIssueComment()
 		}
 		return nil
 	}
@@ -163,7 +167,7 @@ func NewCommentMsg(ghc *ghclient.GHClient, id BotCommentID, values interface{}) 
 			return nil
 		}
 		if vals, ok := x.values.(PRTitleInvalidValues); ok {
-			x.msgComputed = fmt.Sprintf(issuesComments[id], vals.Title, vals.Title)
+			x.msgComputed = fmt.Sprintf(issuesComments[id], vals.Title)
 		}
 
 	case IDIssuesLabelNotExists:

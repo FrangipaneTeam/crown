@@ -93,7 +93,9 @@ func (h *IssuesHandler) Handle(ctx context.Context, eventType, deliveryID string
 				MsgIssuesLabelNotExists.EditIssueComment()
 			} else {
 				MsgIssuesLabelNotExists.RemoveIssueComment()
-				labelsCategory = append(labelsCategory, labeler.FormatedLabelScope(issueTitle.GetScope()))
+				if _, ok := common.Find(labelsCategory, labeler.FormatedLabelScope(issueTitle.GetScope())); !ok {
+					labelsCategory = append(labelsCategory, labeler.FormatedLabelScope(issueTitle.GetScope()))
+				}
 			}
 		} else {
 			ghc.Logger.Debug().Msg("Issue title has no scope")
