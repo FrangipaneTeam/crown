@@ -3,6 +3,8 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"math/rand"
+	"time"
 
 	"github.com/FrangipaneTeam/crown/handlers/comments"
 	"github.com/FrangipaneTeam/crown/handlers/status"
@@ -65,8 +67,23 @@ func (h *PullRequestHandler) Handle(ctx context.Context, eventType, deliveryID s
 
 	ghc.Logger.Debug().Msgf("Event action is %s in Handle PullRequest", event.GetAction())
 
+	// Specific Action
 	switch event.GetAction() {
-	case "opened", "edited", "synchronize":
+	case "labeled":
+		l := event.GetLabel()
+		MsgPRIssuesLabelNotExists := comments.NewCommentMsg(ghc, comments.IDIssuesLabelNotExists, comments.IssuesLabelNotExistsValues{
+			Label: l.GetName(),
+		})
+
+		// Remove comment if label added is in comment
+		MsgPRIssuesLabelNotExists.RemoveIssueComment()
+	}
+
+	// Generic Action
+	switch event.GetAction() {
+	case "opened", "edited", "synchronize", "labeled":
+		rand.Seed(time.Now().UnixNano())
+		time.Sleep(time.Duration(500+rand.Intn(3000-500+1)) * time.Millisecond)
 
 		labelsCategory := make([]string, 0)
 		labelsType := make([]string, 0)
@@ -105,12 +122,22 @@ func (h *PullRequestHandler) Handle(ctx context.Context, eventType, deliveryID s
 
 			// Scope
 			if PrTitle.Scope() != "" {
+				MsgPRIssuesLabelNotExists := comments.NewCommentMsg(ghc, comments.IDIssuesLabelNotExists, comments.IssuesLabelNotExistsValues{
+					Label: labeler.FormatedLabelScope(PrTitle.Scope()),
+				})
+				if MsgPRIssuesLabelNotExists == nil {
+					ghc.Logger.Error().Msg("Failed to create comment")
+				}
 				_, err = ghc.GetLabel(labeler.FormatedLabelScope(PrTitle.Scope()))
 				if err != nil {
-					PR_Check_Title.SetState(statustype.Failure)
-					MsgPRTitleInvalid.EditIssueComment()
+					PR_Labeler.SetState(statustype.Failure)
+					if err := MsgPRIssuesLabelNotExists.EditIssueComment(); err != nil {
+						ghc.Logger.Error().Err(err).Msg("Failed to edit issue comment")
+					}
 				} else {
-					labelsCategory = append(labelsCategory, labeler.FormatedLabelScope(PrTitle.Scope()))
+					if _, ok := common.Find(labelsCategory, labeler.FormatedLabelScope(PrTitle.Scope())); !ok {
+						labelsCategory = append(labelsCategory, labeler.FormatedLabelScope(PrTitle.Scope()))
+					}
 				}
 			}
 
@@ -126,10 +153,14 @@ func (h *PullRequestHandler) Handle(ctx context.Context, eventType, deliveryID s
 						PR_Check_Title.SetState(statustype.Failure)
 						ghc.Logger.Error().Err(err).Msg("Failed to create label")
 					} else {
-						labelsType = append(labelsType, v.GetLongName())
+						if _, ok := common.Find(labelsType, labeler.FormatedLabelScope(v.GetLongName())); !ok {
+							labelsType = append(labelsType, v.GetLongName())
+						}
 					}
 				} else {
-					labelsType = append(labelsType, v.GetLongName())
+					if _, ok := common.Find(labelsType, labeler.FormatedLabelScope(v.GetLongName())); !ok {
+						labelsType = append(labelsType, v.GetLongName())
+					}
 				}
 			}
 
@@ -142,15 +173,27 @@ func (h *PullRequestHandler) Handle(ctx context.Context, eventType, deliveryID s
 						PR_Check_Title.SetState(statustype.Failure)
 						ghc.Logger.Error().Err(err).Msg("Failed to create label")
 					} else {
-						labelsType = append(labelsType, labeler.BreakingChange.GetLongName())
+						if _, ok := common.Find(labelsType, labeler.FormatedLabelScope(labeler.BreakingChange.GetLongName())); !ok {
+							labelsType = append(labelsType, labeler.BreakingChange.GetLongName())
+						}
 					}
 				} else {
-					labelsType = append(labelsType, labeler.BreakingChange.GetLongName())
+					if _, ok := common.Find(labelsType, labeler.FormatedLabelScope(labeler.BreakingChange.GetLongName())); !ok {
+						labelsType = append(labelsType, labeler.BreakingChange.GetLongName())
+					}
 				}
 			}
 
 			if err := PR_Check_Title.IsSuccess(); err != nil {
 				ghc.Logger.Error().Err(err).Msg("Failed to set status")
+			}
+
+			// If PR title is valid, remove issue comment
+			if PR_Check_Title.GetState() == statustype.Success {
+				// Remove issue comment if commit message is valid
+				if err := MsgPRTitleInvalid.RemoveIssueComment(); err != nil {
+					ghc.Logger.Error().Err(err).Msg("Failed to remove issue comment")
+				}
 			}
 		}
 		// End of check PR title
@@ -297,7 +340,7 @@ func (h *PullRequestHandler) Handle(ctx context.Context, eventType, deliveryID s
 		}
 
 		if size.IsTooBig() {
-			MsgPRSizeTooBig.CreateIssueComment()
+			MsgPRSizeTooBig.EditIssueComment()
 		} else {
 			MsgPRSizeTooBig.RemoveIssueComment()
 		}
@@ -321,7 +364,9 @@ func (h *PullRequestHandler) Handle(ctx context.Context, eventType, deliveryID s
 		}
 
 		o := make([]string, 0)
-		allLabels := append(labelsType, labelsCategory...)
+		allLabels := make([]string, 0)
+		allLabels = append(allLabels, labelsType...)
+		allLabels = append(allLabels, labelsCategory...)
 		allLabels = append(allLabels, labelsSize...)
 
 		for _, lbl := range event.PullRequest.Labels {
@@ -347,16 +392,6 @@ func (h *PullRequestHandler) Handle(ctx context.Context, eventType, deliveryID s
 		if err := PR_Labeler.IsSuccess(); err != nil {
 			ghc.Logger.Error().Err(err).Msg("Failed to set status")
 		}
-
-	case "labeled":
-
-		l := event.GetLabel()
-		MsgPRIssuesLabelNotExists := comments.NewCommentMsg(ghc, comments.IDIssuesLabelNotExists, comments.IssuesLabelNotExistsValues{
-			Label: l.GetName(),
-		})
-
-		// Remove comment if label added is in comment
-		MsgPRIssuesLabelNotExists.RemoveIssueComment()
 
 	default:
 		return nil

@@ -57,6 +57,8 @@ func (h *IssuesHandler) Handle(ctx context.Context, eventType, deliveryID string
 	switch event.GetAction() {
 	case "opened", "edited":
 
+		// TODO Parse body and Extract URL
+
 		// * Check if the issue have a conventional issue title
 		MsgIssuesTitleInvalid := comments.NewCommentMsg(ghc, comments.IDIssuesTitleInvalid, comments.IssuesTitleInvalidValues{
 			Title: event.GetIssue().GetTitle(),
@@ -91,7 +93,9 @@ func (h *IssuesHandler) Handle(ctx context.Context, eventType, deliveryID string
 				MsgIssuesLabelNotExists.EditIssueComment()
 			} else {
 				MsgIssuesLabelNotExists.RemoveIssueComment()
-				labelsCategory = append(labelsCategory, labeler.FormatedLabelScope(issueTitle.GetScope()))
+				if _, ok := common.Find(labelsCategory, labeler.FormatedLabelScope(issueTitle.GetScope())); !ok {
+					labelsCategory = append(labelsCategory, labeler.FormatedLabelScope(issueTitle.GetScope()))
+				}
 			}
 		} else {
 			ghc.Logger.Debug().Msg("Issue title has no scope")
@@ -120,55 +124,6 @@ func (h *IssuesHandler) Handle(ctx context.Context, eventType, deliveryID string
 			}
 		}
 
-		// lbls, err := ghc.SearchLabelInIssue("^category/")
-		// if err != nil {
-		// 	ghc.Logger.Error().Err(err).Msg("Failed to search label in issue")
-		// }
-
-		// o := make([]string, 0)
-
-		// for _, lbl := range lbls {
-		// 	if _, ok := common.Find(labelsCategory, lbl.GetName()); !ok {
-		// 		ghc.RemoveLabelForIssue(lbl.GetName())
-		// 	}
-		// 	o = append(o, lbl.GetName())
-		// }
-
-		// for _, lbl := range labelsCategory {
-		// 	if _, ok := common.Find(o, lbl); !ok {
-		// 		ghc.AddLabelToIssue(lbl)
-		// 	}
-		// }
-
-	// case "edited":
-
-	// 	// * Check if the issue have a conventional issue title
-
-	// 	oldTitle := event.GetChanges().GetTitle().GetFrom()
-	// 	if oldTitle != ghc.GetIssue().GetTitle() {
-	// 		issueTitleOld, err := conventionalissue.Parse(oldTitle)
-	// 		if err == nil {
-	// 			ghc.RemoveLabelForIssue(labeler.FormatedLabelScope(issueTitleOld.GetScope()))
-	// 		}
-
-	// 		issueTitleNew, err := conventionalissue.Parse(ghc.GetIssue().GetTitle())
-	// 		if err != nil {
-	// 			comments.EditIssueComment(ghc, comments.IDIssuesTitleInvalid, ghc.GetIssue().GetTitle())
-	// 		} else {
-	// 			if err := comments.RemoveIssueComment(ghc, comments.IDIssuesTitleInvalid); err != nil {
-	// 				ghc.Logger.Error().Err(err).Msg("Failed to remove issue title invalid comment")
-	// 			}
-
-	// 			_, err = ghc.GetLabel(labeler.FormatedLabelScope(issueTitleNew.GetScope()))
-	// 			if err != nil {
-	// 				comments.EditIssueComment(ghc, comments.IDIssuesLabelNotExists, issueTitleNew.GetScope(), issueTitleNew.GetScope())
-	// 			} else {
-	// 				comments.RemoveIssueComment(ghc, comments.IDIssuesLabelNotExists)
-	// 				labelsCategory = append(labelsCategory, labeler.FormatedLabelScope(issueTitleNew.GetScope()))
-	// 			}
-	// 		}
-	// 	}
-
 	case "labeled":
 
 		ghc.Logger.Debug().Msgf("Label is %s", event.GetLabel().GetName())
@@ -179,6 +134,9 @@ func (h *IssuesHandler) Handle(ctx context.Context, eventType, deliveryID string
 
 		// Remove comment if label added is in comment
 		MsgPRIssuesLabelNotExists.RemoveIssueComment()
+
+		// TODO Add closed action
+		// Untrack external issue
 
 	}
 

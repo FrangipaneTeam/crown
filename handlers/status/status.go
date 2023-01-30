@@ -141,3 +141,8 @@ func (s *Status) IsSuccess() error {
 	}
 	return s.SetState(status.Success)
 }
+
+// GetState returns the state of the status
+func (s *Status) GetState() status.Status {
+	return status.Status(*s.repoStatus.State)
+}

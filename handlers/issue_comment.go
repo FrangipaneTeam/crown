@@ -38,7 +38,7 @@ func (h *IssueCommentHandler) Handle(ctx context.Context, eventType, deliveryID 
 	commentID := event.Comment.GetID()
 	user := event.Comment.GetUser()
 	if ok, _ := ghc.IsInFrangipaneOrg(user.GetLogin()); ok {
-		if foundSlashCommand, cmd := slashcommand.FindSlashCommand(commentBody, commentID); foundSlashCommand {
+		if foundSlashCommand, cmd := slashcommand.FindSlashCommand(commentBody, commentID, int64(event.Issue.GetNumber())); foundSlashCommand {
 			ghc.Logger.Debug().Msgf("Found slash command %s with verb %s and description %s from %s", cmd.Command, cmd.Verb, cmd.Desc, user.GetName())
 			if err := slashcommand.ExecuteSlashCommand(ghc, cmd); err != nil {
 				return err
