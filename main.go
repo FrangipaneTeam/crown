@@ -8,6 +8,8 @@ import (
 
 	"github.com/FrangipaneTeam/crown/handlers"
 	"github.com/FrangipaneTeam/crown/pkg/config"
+	"github.com/FrangipaneTeam/crown/pkg/db"
+	"github.com/FrangipaneTeam/crown/pkg/tracker"
 	"github.com/gregjones/httpcache"
 	"github.com/palantir/go-githubapp/githubapp"
 	"github.com/rcrowley/go-metrics"
@@ -16,7 +18,7 @@ import (
 )
 
 var (
-	AppID int64
+	Db *db.DB
 )
 
 func main() {
@@ -28,6 +30,14 @@ func main() {
 	// logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
 	logger := log.Output(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339})
 	zerolog.DefaultContextLogger = &logger
+
+	err = db.NewDB(config.DB.Path)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Failed to open database")
+	}
+
+	tracker.Init(logger)
+	go tracker.Watch()
 
 	metricsRegistry := metrics.DefaultRegistry
 
@@ -41,7 +51,7 @@ func main() {
 		),
 	)
 	if err != nil {
-		panic(err)
+		logger.Fatal().Err(err).Msg("Failed to create client githubApp")
 	}
 
 	webhookHandler := githubapp.NewEventDispatcher(
@@ -66,4 +76,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	db.DataBase.Close()
 }

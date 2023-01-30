@@ -9,14 +9,21 @@ import (
 )
 
 var (
-	AppID int64
+	AppID      int64
+	PrivateKey []byte
 )
 
 type Config struct {
 	Server HTTPConfig       `yaml:"server"`
 	Github githubapp.Config `yaml:"github"`
+	DB     DBConfig         `yaml:"database"`
 
 	AppConfig CrownConfig `yaml:"app_configuration"`
+}
+
+// DBConfig
+type DBConfig struct {
+	Path string `yaml:"path"`
 }
 
 type HTTPConfig struct {
@@ -41,6 +48,7 @@ func ReadConfig(path string) (*Config, error) {
 	}
 
 	AppID = c.Github.App.IntegrationID
+	PrivateKey = []byte(c.Github.App.PrivateKey)
 
 	return &c, nil
 }

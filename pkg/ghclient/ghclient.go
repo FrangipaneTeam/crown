@@ -139,6 +139,11 @@ func (g *GHClient) GetIssueNumber() int {
 	return g.issueNumber
 }
 
+// GetInstallationID returns the installation ID.
+func (g *GHClient) GetInstallationID() int64 {
+	return g.installationID
+}
+
 // IsInFrangipaneOrg returns true if the user is in the FrangipaneTeam organization.
 func (g *GHClient) IsInFrangipaneOrg(user string) (bool, error) {
 	inOrg, _, err := g.client.Organizations.IsMember(g.context, g.GetOrg(), user)

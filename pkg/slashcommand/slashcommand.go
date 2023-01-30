@@ -5,6 +5,7 @@ import (
 	"regexp"
 
 	"github.com/FrangipaneTeam/crown/pkg/ghclient"
+	"github.com/FrangipaneTeam/crown/pkg/tracker"
 	"github.com/google/go-github/v47/github"
 )
 
@@ -13,6 +14,7 @@ const (
 
 	startChar = "/"
 	labelCmd  = "label"
+	trackCmd  = "track"
 
 	addVerb    = "add"
 	removeVerb = "remove"
@@ -27,10 +29,11 @@ type SlashCommand struct {
 	Verb    string
 	Desc    string
 	IssueID int64
+	Issue   *github.Issue
 }
 
 // FindSlashCommand finds slash command in body string.
-func FindSlashCommand(body string, issueID int64) (bool, *SlashCommand) {
+func FindSlashCommand(body string, commentID, issueID int64) (bool, *SlashCommand) {
 	fmt.Println(body)
 	cmd := slashcommandRe.FindStringSubmatch(body)
 	fmt.Println(len(cmd))
@@ -42,6 +45,13 @@ func FindSlashCommand(body string, issueID int64) (bool, *SlashCommand) {
 	case labelCmd:
 		return true, &SlashCommand{
 			Command: labelCmd,
+			Verb:    cmd[2],
+			Desc:    cmd[3],
+			IssueID: commentID,
+		}
+	case trackCmd:
+		return true, &SlashCommand{
+			Command: trackCmd,
 			Verb:    cmd[2],
 			Desc:    cmd[3],
 			IssueID: issueID,
@@ -88,6 +98,23 @@ func ExecuteSlashCommand(ghc *ghclient.GHClient, cmd *SlashCommand) error {
 			if err := ghc.AddCommentReaction(cmd.IssueID, "+1"); err != nil {
 				ghc.Logger.Err(err).Msg("failed to add reaction")
 				return err
+			}
+
+		}
+	case trackCmd:
+		switch cmd.Verb {
+		case addVerb:
+
+			if err := tracker.TrackNewIssue(ghc.GetRepoOwner(), ghc.GetRepoName(), ghc.GetInstallationID(), cmd.IssueID, cmd.Desc); err != nil {
+				if err := ghc.AddCommentReaction(cmd.IssueID, "-1"); err != nil {
+					ghc.Logger.Err(err).Msg("failed to add reaction")
+				}
+				return err
+			} else {
+				if err := ghc.AddCommentReaction(cmd.IssueID, "+1"); err != nil {
+					ghc.Logger.Err(err).Msg("failed to add reaction")
+					return err
+				}
 			}
 
 		}
