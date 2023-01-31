@@ -40,9 +40,13 @@ func (h *IssuesHandler) Handle(ctx context.Context, eventType, deliveryID string
 		return errors.Wrap(err, "failed to create github client")
 	}
 
-	ghc.Logger.Debug().Msgf("Event action is %s in Handle issues", event.GetAction())
+	core := &coreIssues{
+		ghc:            ghc,
+		event:          event,
+		labelsCategory: &[]string{},
+	}
 
-	labelsCategory := make([]string, 0)
+	ghc.Logger.Debug().Msgf("Event action is %s in Handle issues", event.GetAction())
 
 	if strings.HasSuffix(ghc.GetAuthor(), "[bot]") {
 		ghc.Logger.Debug().Msg("Issue was created by a bot")
@@ -57,76 +61,12 @@ func (h *IssuesHandler) Handle(ctx context.Context, eventType, deliveryID string
 	switch event.GetAction() {
 	case "opened", "edited":
 
-		// TODO Parse body and Extract URL
-
 		// * Check if the issue have a conventional issue title
-		MsgIssuesTitleInvalid := comments.NewCommentMsg(ghc, comments.IDIssuesTitleInvalid, comments.IssuesTitleInvalidValues{
-			Title: event.GetIssue().GetTitle(),
-		})
-		if MsgIssuesTitleInvalid == nil {
-			ghc.Logger.Error().Msg("Failed to create comment")
-			return nil
-		}
+		core.ParseTitle()
 
-		// ? ParseIssueTitle
-		issueTitle, err := conventionalissue.Parse(event.GetIssue().GetTitle())
-		if err != nil {
-			ghc.Logger.Debug().Msg("Issue title is not conventional issue format")
-			MsgIssuesTitleInvalid.EditIssueComment()
-			return nil
-		}
-
-		if issueTitle.GetScope() != "" {
-			if err := MsgIssuesTitleInvalid.RemoveIssueComment(); err != nil {
-				ghc.Logger.Error().Err(err).Msg("Failed to remove comment")
-			}
-
-			MsgIssuesLabelNotExists := comments.NewCommentMsg(ghc, comments.IDIssuesLabelNotExists, comments.IssuesLabelNotExistsValues{
-				Label: labeler.FormatedLabelScope(issueTitle.GetScope()),
-			})
-			if MsgIssuesLabelNotExists == nil {
-				ghc.Logger.Error().Msg("Failed to create comment")
-			}
-
-			_, err = ghc.GetLabel(labeler.FormatedLabelScope(issueTitle.GetScope()))
-			if err != nil {
-				MsgIssuesLabelNotExists.EditIssueComment()
-			} else {
-				MsgIssuesLabelNotExists.RemoveIssueComment()
-				if _, ok := common.Find(labelsCategory, labeler.FormatedLabelScope(issueTitle.GetScope())); !ok {
-					labelsCategory = append(labelsCategory, labeler.FormatedLabelScope(issueTitle.GetScope()))
-				}
-			}
-		} else {
-			ghc.Logger.Debug().Msg("Issue title has no scope")
-			MsgIssuesTitleInvalid.EditIssueComment()
-		}
-
-		o := make([]string, 0)
-		allLabels := make([]string, 0)
-		allLabels = append(allLabels, labelsCategory...)
-
-		for _, lbl := range event.Issue.Labels {
-			ghc.Logger.Debug().Msgf("Label is %s", lbl.GetName())
-			if _, ok := common.Find(allLabels, lbl.GetName()); !ok {
-				if err := ghc.RemoveLabelForIssue(lbl.GetName()); err != nil {
-					ghc.Logger.Error().Err(err).Msg("Failed to remove label")
-				}
-			}
-			o = append(o, lbl.GetName())
-		}
-
-		for _, lbl := range allLabels {
-			if _, ok := common.Find(o, lbl); !ok {
-				if err := ghc.AddLabelToIssue(lbl); err != nil {
-					ghc.Logger.Error().Err(err).Msg("Failed to add label")
-				}
-			}
-		}
+		core.ComputeLabels()
 
 	case "labeled":
-
-		ghc.Logger.Debug().Msgf("Label is %s", event.GetLabel().GetName())
 
 		MsgPRIssuesLabelNotExists := comments.NewCommentMsg(ghc, comments.IDIssuesLabelNotExists, comments.IssuesLabelNotExistsValues{
 			Label: event.GetLabel().GetName(),
@@ -142,4 +82,87 @@ func (h *IssuesHandler) Handle(ctx context.Context, eventType, deliveryID string
 
 	return nil
 
+}
+
+type coreIssues struct {
+	ghc            *ghclient.GHClient
+	event          github.IssuesEvent
+	labelsCategory *[]string
+}
+
+// ParseTitle parse the title of the issue
+func (core *coreIssues) ParseTitle() error {
+
+	MsgIssuesTitleInvalid := comments.NewCommentMsg(core.ghc, comments.IDIssuesTitleInvalid, comments.IssuesTitleInvalidValues{
+		Title: core.event.GetIssue().GetTitle(),
+	})
+	if MsgIssuesTitleInvalid == nil {
+		core.ghc.Logger.Error().Msg("Failed to create comment")
+		return nil
+	}
+
+	// ? ParseIssueTitle
+	issueTitle, err := conventionalissue.Parse(core.event.GetIssue().GetTitle())
+	if err != nil {
+		core.ghc.Logger.Debug().Msg("Issue title is not conventional issue format")
+		MsgIssuesTitleInvalid.EditIssueComment()
+		return nil
+	}
+
+	if issueTitle.GetScope() != "" {
+		if err := MsgIssuesTitleInvalid.RemoveIssueComment(); err != nil {
+			core.ghc.Logger.Error().Err(err).Msg("Failed to remove comment")
+		}
+
+		MsgIssuesLabelNotExists := comments.NewCommentMsg(core.ghc, comments.IDIssuesLabelNotExists, comments.IssuesLabelNotExistsValues{
+			Label: labeler.FormatedLabelScope(issueTitle.GetScope()),
+		})
+		if MsgIssuesLabelNotExists == nil {
+			core.ghc.Logger.Error().Msg("Failed to create comment")
+		}
+
+		_, err = core.ghc.GetLabel(labeler.FormatedLabelScope(issueTitle.GetScope()))
+		if err != nil {
+			MsgIssuesLabelNotExists.EditIssueComment()
+		} else {
+			MsgIssuesLabelNotExists.RemoveIssueComment()
+			if _, ok := common.Find(*core.labelsCategory, labeler.FormatedLabelScope(issueTitle.GetScope())); !ok {
+				*core.labelsCategory = append(*core.labelsCategory, labeler.FormatedLabelScope(issueTitle.GetScope()))
+			}
+		}
+	} else {
+		core.ghc.Logger.Debug().Msg("Issue title has no scope")
+		MsgIssuesTitleInvalid.EditIssueComment()
+	}
+
+	return nil
+
+}
+
+// ComputeLabels compute labels to add to the issue
+func (core *coreIssues) ComputeLabels() error {
+
+	o := make([]string, 0)
+	allLabels := make([]string, 0)
+	allLabels = append(allLabels, *core.labelsCategory...)
+
+	for _, lbl := range core.event.Issue.Labels {
+		core.ghc.Logger.Debug().Msgf("Label is %s", lbl.GetName())
+		if _, ok := common.Find(allLabels, lbl.GetName()); !ok {
+			if err := core.ghc.RemoveLabelForIssue(lbl.GetName()); err != nil {
+				core.ghc.Logger.Error().Err(err).Msg("Failed to remove label")
+			}
+		}
+		o = append(o, lbl.GetName())
+	}
+
+	for _, lbl := range allLabels {
+		if _, ok := common.Find(o, lbl); !ok {
+			if err := core.ghc.AddLabelToIssue(lbl); err != nil {
+				core.ghc.Logger.Error().Err(err).Msg("Failed to add label")
+			}
+		}
+	}
+
+	return nil
 }
