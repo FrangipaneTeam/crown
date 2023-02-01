@@ -79,7 +79,7 @@ type coreIssues struct {
 
 // Community labels
 func (core *coreIssues) Community() {
-	if *core.event.Issue.AuthorAssociation == "CONTRIBUTOR" {
+	if *core.event.Issue.AuthorAssociation == "NONE" || *core.event.Issue.AuthorAssociation == "CONTRIBUTOR" {
 		_, err := core.ghc.GetLabel(labeler.LabelerCommunity().GetName())
 		if err != nil {
 			err = core.ghc.CreateLabel(labeler.LabelerCommunity().GithubLabel())

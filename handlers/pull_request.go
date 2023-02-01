@@ -81,27 +81,33 @@ func (h *PullRequestHandler) Handle(ctx context.Context, eventType, deliveryID s
 		return nil
 	}
 
-	// ? Init status
-	// At this instant, All status are pending
-	core.PR_Check_Title = status.NewStatus(ghc, status.PR_Check_Title, core.commitSHA)
-	core.PR_Check_commits = status.NewStatus(ghc, status.PR_Check_Commits, core.commitSHA)
-	core.PR_Labeler = status.NewStatus(ghc, status.PR_Labeler, core.commitSHA)
-	core.PR_Check_SizeChanges = status.NewStatus(ghc, status.PR_Check_SizeChanges, core.commitSHA)
-
 	// Generic Action
 	switch event.GetAction() {
+
 	case "opened", "edited", "synchronize":
 
+		// ? Init status
+		// At this instant, All status are pending
+		core.PR_Check_Title = status.NewStatus(ghc, status.PR_Check_Title, core.commitSHA)
+		core.PR_Check_commits = status.NewStatus(ghc, status.PR_Check_Commits, core.commitSHA)
+		core.PR_Labeler = status.NewStatus(ghc, status.PR_Labeler, core.commitSHA)
+		core.PR_Check_SizeChanges = status.NewStatus(ghc, status.PR_Check_SizeChanges, core.commitSHA)
+
+		// Check if title respect conventional commit
 		core.CheckTitle()
+		// Check if commits respect conventional commit
 		core.CheckCommits()
+		// Check if PR respect size
 		core.CheckSizePR()
+		// Check if author is COMMUNITY
+		core.Community()
 
 		core.ComputeLabels()
 
 	case "labeled":
 
 		rand.Seed(time.Now().UnixNano())
-		time.Sleep(time.Duration(500+rand.Intn(3000-500+1)) * time.Millisecond)
+		time.Sleep(time.Duration(3+rand.Intn(6-3+1)) * time.Second)
 
 		l := event.GetLabel()
 		MsgPRIssuesLabelNotExists := comments.NewCommentMsg(ghc, comments.IDIssuesLabelNotExists, comments.IssuesLabelNotExistsValues{
@@ -110,11 +116,6 @@ func (h *PullRequestHandler) Handle(ctx context.Context, eventType, deliveryID s
 
 		// Remove comment if label added is in comment
 		MsgPRIssuesLabelNotExists.RemoveIssueComment()
-
-		core.CheckTitle()
-		core.CheckCommits()
-
-		core.ComputeLabels()
 
 	default:
 		return nil
@@ -442,5 +443,26 @@ func (core *corePR) ComputeLabels() {
 
 	if err := core.PR_Labeler.IsSuccess(); err != nil {
 		core.ghc.Logger.Error().Err(err).Msg("Failed to set status")
+	}
+}
+
+// Community labels
+func (core *corePR) Community() {
+	if *core.event.PullRequest.AuthorAssociation == "NONE" || *core.event.PullRequest.AuthorAssociation == "CONTRIBUTOR" {
+		_, err := core.ghc.GetLabel(labeler.LabelerCommunity().GetName())
+		if err != nil {
+			err = core.ghc.CreateLabel(labeler.LabelerCommunity().GithubLabel())
+			if err != nil {
+				core.ghc.Logger.Error().Err(err).Msg("Failed to create label")
+			} else {
+				if _, ok := common.Find(*core.labelsType, labeler.FormatedLabelScope(labeler.LabelerCommunity().GetName())); !ok {
+					*core.labelsType = append(*core.labelsType, labeler.LabelerCommunity().GetName())
+				}
+			}
+		} else {
+			if _, ok := common.Find(*core.labelsType, labeler.FormatedLabelScope(labeler.LabelerCommunity().GetName())); !ok {
+				*core.labelsType = append(*core.labelsType, labeler.LabelerCommunity().GetName())
+			}
+		}
 	}
 }
