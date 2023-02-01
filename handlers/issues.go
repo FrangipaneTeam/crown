@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/FrangipaneTeam/crown/handlers/comments"
 	"github.com/FrangipaneTeam/crown/pkg/ghclient"
+	"github.com/FrangipaneTeam/crown/pkg/labeler"
 	"github.com/azrod/common-go"
 	"github.com/google/go-github/v47/github"
 	"github.com/palantir/go-githubapp/githubapp"
@@ -42,6 +42,7 @@ func (h *IssuesHandler) Handle(ctx context.Context, eventType, deliveryID string
 		ghc:            ghc,
 		event:          event,
 		labelsCategory: &[]string{},
+		labelsType:     &[]string{},
 	}
 
 	ghc.Logger.Debug().Msgf("Event action is %s in Handle issues", event.GetAction())
@@ -57,21 +58,11 @@ func (h *IssuesHandler) Handle(ctx context.Context, eventType, deliveryID string
 	}
 
 	switch event.GetAction() {
-	case "opened", "edited":
+	case "opened":
 
+		// Author community
+		core.Community()
 		core.ComputeLabels()
-
-	case "labeled":
-
-		MsgPRIssuesLabelNotExists := comments.NewCommentMsg(ghc, comments.IDIssuesLabelNotExists, comments.IssuesLabelNotExistsValues{
-			Label: event.GetLabel().GetName(),
-		})
-
-		// Remove comment if label added is in comment
-		MsgPRIssuesLabelNotExists.RemoveIssueComment()
-
-		// TODO Add closed action
-		// Untrack external issue
 
 	}
 
@@ -83,6 +74,28 @@ type coreIssues struct {
 	ghc            *ghclient.GHClient
 	event          github.IssuesEvent
 	labelsCategory *[]string
+	labelsType     *[]string
+}
+
+// Community labels
+func (core *coreIssues) Community() {
+	if *core.event.Issue.AuthorAssociation == "NONE" || *core.event.Issue.AuthorAssociation == "CONTRIBUTOR" {
+		_, err := core.ghc.GetLabel(labeler.LabelerCommunity().GetName())
+		if err != nil {
+			err = core.ghc.CreateLabel(labeler.LabelerCommunity().GithubLabel())
+			if err != nil {
+				core.ghc.Logger.Error().Err(err).Msg("Failed to create label")
+			} else {
+				if _, ok := common.Find(*core.labelsType, labeler.FormatedLabelScope(labeler.LabelerCommunity().GetName())); !ok {
+					*core.labelsType = append(*core.labelsType, labeler.LabelerCommunity().GetName())
+				}
+			}
+		} else {
+			if _, ok := common.Find(*core.labelsType, labeler.FormatedLabelScope(labeler.LabelerCommunity().GetName())); !ok {
+				*core.labelsType = append(*core.labelsType, labeler.LabelerCommunity().GetName())
+			}
+		}
+	}
 }
 
 // ComputeLabels compute labels to add to the issue
@@ -91,6 +104,7 @@ func (core *coreIssues) ComputeLabels() error {
 	o := make([]string, 0)
 	allLabels := make([]string, 0)
 	allLabels = append(allLabels, *core.labelsCategory...)
+	allLabels = append(allLabels, *core.labelsType...)
 
 	for _, lbl := range core.event.Issue.Labels {
 		core.ghc.Logger.Debug().Msgf("Label is %s", lbl.GetName())
