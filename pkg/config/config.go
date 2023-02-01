@@ -17,6 +17,7 @@ type Config struct {
 	Server HTTPConfig       `yaml:"server"`
 	Github githubapp.Config `yaml:"github"`
 	DB     DBConfig         `yaml:"database"`
+	Log    LogConfig        `yaml:"log"`
 
 	AppConfig CrownConfig `yaml:"app_configuration"`
 }
@@ -24,6 +25,11 @@ type Config struct {
 // DBConfig
 type DBConfig struct {
 	Path string `yaml:"path"`
+}
+
+type LogConfig struct {
+	Level string `yaml:"level"`
+	Human bool   `yaml:"human"`
 }
 
 type HTTPConfig struct {
@@ -45,6 +51,10 @@ func ReadConfig(path string) (*Config, error) {
 
 	if err := yaml.Unmarshal(bytes, &c); err != nil {
 		return nil, errors.Wrap(err, "failed parsing configuration file")
+	}
+
+	if c.Log.Level == "" {
+		c.Log.Level = "info"
 	}
 
 	AppID = c.Github.App.IntegrationID
