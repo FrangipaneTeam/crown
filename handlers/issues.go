@@ -6,9 +6,7 @@ import (
 	"strings"
 
 	"github.com/FrangipaneTeam/crown/handlers/comments"
-	"github.com/FrangipaneTeam/crown/pkg/conventionalissue"
 	"github.com/FrangipaneTeam/crown/pkg/ghclient"
-	"github.com/FrangipaneTeam/crown/pkg/labeler"
 	"github.com/azrod/common-go"
 	"github.com/google/go-github/v47/github"
 	"github.com/palantir/go-githubapp/githubapp"
@@ -61,9 +59,6 @@ func (h *IssuesHandler) Handle(ctx context.Context, eventType, deliveryID string
 	switch event.GetAction() {
 	case "opened", "edited":
 
-		// * Check if the issue have a conventional issue title
-		core.ParseTitle()
-
 		core.ComputeLabels()
 
 	case "labeled":
@@ -88,55 +83,6 @@ type coreIssues struct {
 	ghc            *ghclient.GHClient
 	event          github.IssuesEvent
 	labelsCategory *[]string
-}
-
-// ParseTitle parse the title of the issue
-func (core *coreIssues) ParseTitle() error {
-
-	MsgIssuesTitleInvalid := comments.NewCommentMsg(core.ghc, comments.IDIssuesTitleInvalid, comments.IssuesTitleInvalidValues{
-		Title: core.event.GetIssue().GetTitle(),
-	})
-	if MsgIssuesTitleInvalid == nil {
-		core.ghc.Logger.Error().Msg("Failed to create comment")
-		return nil
-	}
-
-	// ? ParseIssueTitle
-	issueTitle, err := conventionalissue.Parse(core.event.GetIssue().GetTitle())
-	if err != nil {
-		core.ghc.Logger.Debug().Msg("Issue title is not conventional issue format")
-		MsgIssuesTitleInvalid.EditIssueComment()
-		return nil
-	}
-
-	if issueTitle.GetScope() != "" {
-		if err := MsgIssuesTitleInvalid.RemoveIssueComment(); err != nil {
-			core.ghc.Logger.Error().Err(err).Msg("Failed to remove comment")
-		}
-
-		MsgIssuesLabelNotExists := comments.NewCommentMsg(core.ghc, comments.IDIssuesLabelNotExists, comments.IssuesLabelNotExistsValues{
-			Label: labeler.FormatedLabelScope(issueTitle.GetScope()),
-		})
-		if MsgIssuesLabelNotExists == nil {
-			core.ghc.Logger.Error().Msg("Failed to create comment")
-		}
-
-		_, err = core.ghc.GetLabel(labeler.FormatedLabelScope(issueTitle.GetScope()))
-		if err != nil {
-			MsgIssuesLabelNotExists.EditIssueComment()
-		} else {
-			MsgIssuesLabelNotExists.RemoveIssueComment()
-			if _, ok := common.Find(*core.labelsCategory, labeler.FormatedLabelScope(issueTitle.GetScope())); !ok {
-				*core.labelsCategory = append(*core.labelsCategory, labeler.FormatedLabelScope(issueTitle.GetScope()))
-			}
-		}
-	} else {
-		core.ghc.Logger.Debug().Msg("Issue title has no scope")
-		MsgIssuesTitleInvalid.EditIssueComment()
-	}
-
-	return nil
-
 }
 
 // ComputeLabels compute labels to add to the issue
