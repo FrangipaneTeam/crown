@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/FrangipaneTeam/crown/handlers"
@@ -27,9 +28,33 @@ func main() {
 		panic(err)
 	}
 
-	// logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
-	logger := log.Output(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339})
+	// SRC https://github.com/rs/zerolog#add-file-and-line-number-to-log
+	zerolog.CallerMarshalFunc = func(pc uintptr, file string, line int) string {
+		short := file
+		for i := len(file) - 1; i > 0; i-- {
+			if file[i] == '/' {
+				short = file[i+1:]
+				break
+			}
+		}
+		file = short
+		return file + ":" + strconv.Itoa(line)
+	}
+	var logger zerolog.Logger
+
+	if config.Log.Human {
+		logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}).With().Caller().Logger()
+	} else {
+		logger = zerolog.New(os.Stdout).With().Timestamp().Caller().Logger()
+	}
 	zerolog.DefaultContextLogger = &logger
+
+	level, err := zerolog.ParseLevel(config.Log.Level)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Failed to parse log level")
+	}
+
+	zerolog.SetGlobalLevel(level)
 
 	err = db.NewDB(config.DB.Path)
 	if err != nil {
