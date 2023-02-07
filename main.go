@@ -83,7 +83,7 @@ func main() {
 		[]githubapp.EventHandler{
 			&handlers.PullRequestHandler{ClientCreator: cc},
 			&handlers.IssueCommentHandler{ClientCreator: cc},
-			&handlers.IssuesHandler{ClientCreator: cc},
+			// &handlers.IssuesHandler{ClientCreator: cc},
 		},
 		config.Github.App.WebhookSecret,
 		githubapp.WithScheduler(
