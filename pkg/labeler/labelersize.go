@@ -80,7 +80,7 @@ func (c LabelerSize) GetCode() conventionalsizepr.Size {
 	return LabelsSize[c].code
 }
 
-// GetGithubLabel returns the github label of the label
+// GithubLabel returns the github label of the label
 func (c LabelerSize) GithubLabel() github.Label {
 	return github.Label{
 		Name:  github.String(LabelsSize[c].longName),

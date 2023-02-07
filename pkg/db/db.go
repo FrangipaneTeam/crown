@@ -14,11 +14,13 @@ type DbName string
 
 const (
 	DBTrack DbName = "Track"
+	DBEvent DbName = "Event"
 )
 
 var (
 	DbNames = []DbName{
 		DBTrack,
+		DBEvent,
 	}
 )
 

@@ -1,6 +1,7 @@
 package slashcommand
 
 import (
+	"errors"
 	"regexp"
 
 	"github.com/FrangipaneTeam/crown/pkg/ghclient"
@@ -32,33 +33,38 @@ type SlashCommand struct {
 }
 
 // FindSlashCommand finds slash command in body string.
-func FindSlashCommand(body string, commentID, issueID int64) (bool, *SlashCommand) {
+func FindSlashCommand(body string) (bool, interface{}, error) {
 	cmd := slashcommandRe.FindStringSubmatch(body)
 	if len(cmd) != 4 {
-		return false, nil
+		return false, nil, errors.New("invalid command")
 	}
 
 	switch cmd[1] {
 	case labelCmd:
-		return true, &SlashCommand{
-			Command: labelCmd,
-			Verb:    cmd[2],
-			Desc:    cmd[3],
-			IssueID: commentID,
+		v, err := findVerb(cmd[2])
+		if err != nil {
+			return false, nil, err
 		}
-	case trackCmd:
-		return true, &SlashCommand{
-			Command: trackCmd,
-			Verb:    cmd[2],
-			Desc:    cmd[3],
-			IssueID: issueID,
-		}
+		return true, SlashCommandLabel{
+			Action: CommandLabel,
+			Verb:   v,
+			Label:  cmd[3],
+		}, nil
+
+	// case trackCmd:
+	// 	return true, &SlashCommand{
+	// 		Command: trackCmd,
+	// 		Verb:    cmd[2],
+	// 		Desc:    cmd[3],
+	// 		IssueID: issueID,
+	// 	}
 	default:
-		return false, nil
+		return false, nil, errors.New("invalid command")
 	}
 }
 
 // ExecuteSlashCommand executes slash command.
+// Deprecated
 func ExecuteSlashCommand(ghc *ghclient.GHClient, cmd *SlashCommand) error {
 	switch cmd.Command {
 	case labelCmd:
