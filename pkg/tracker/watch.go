@@ -19,7 +19,7 @@ const (
 func Watch() {
 
 	for {
-		logger.Debug().Msg("Start watching")
+		logger.Trace().Msg("Start watching")
 		// Get all the repos
 		err := db.DataBase.Update(func(tx *bbolt.Tx) error {
 			// Assume bucket exists and has keys
@@ -61,7 +61,7 @@ func Watch() {
 			logger.Error().Err(err).Msg("Error while watching")
 		}
 
-		logger.Debug().Msg("End watching waiting for next loop")
+		logger.Trace().Msg("End watching waiting for next loop")
 		time.Sleep(intervalLoopWatch)
 	}
 }

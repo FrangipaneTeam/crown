@@ -3,19 +3,19 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"math/rand"
-	"time"
+	"fmt"
 
 	"github.com/FrangipaneTeam/crown/handlers/comments"
 	"github.com/FrangipaneTeam/crown/handlers/status"
-	"github.com/FrangipaneTeam/crown/pkg/config"
 	"github.com/FrangipaneTeam/crown/pkg/conventionalcommit"
 	"github.com/FrangipaneTeam/crown/pkg/conventionalsizepr"
+	"github.com/FrangipaneTeam/crown/pkg/db"
 	"github.com/FrangipaneTeam/crown/pkg/ghclient"
 	"github.com/FrangipaneTeam/crown/pkg/labeler"
 	"github.com/FrangipaneTeam/crown/pkg/statustype"
 	"github.com/azrod/common-go"
 	"github.com/google/go-github/v47/github"
+	"github.com/kr/pretty"
 	"github.com/palantir/go-githubapp/githubapp"
 	"github.com/pkg/errors"
 )
@@ -44,35 +44,35 @@ func (h *PullRequestHandler) Handle(ctx context.Context, eventType, deliveryID s
 		return errors.Wrap(err, "failed to create github client for issue comment event")
 	}
 
-	if err = ghc.BranchRequiredStatusChecks([]*github.RequiredStatusCheck{
-		{
-			Context: status.PR_Check_Title.String(),
-			AppID:   github.Int64(config.AppID),
-		},
-		{
-			Context: status.PR_Check_SizeChanges.String(),
-			AppID:   github.Int64(config.AppID),
-		},
-		{
-			Context: status.PR_Labeler.String(),
-			AppID:   github.Int64(config.AppID),
-		},
-		{
-			Context: status.PR_Check_Commits.String(),
-			AppID:   github.Int64(config.AppID),
-		},
-	}); err != nil {
-		ghc.Logger.Error().Err(err).Msg("Failed to set branch protection")
-	}
+	// if err = ghc.BranchRequiredStatusChecks([]*github.RequiredStatusCheck{
+	// 	{
+	// 		Context: status.PR_Check_Title.String(),
+	// 		AppID:   github.Int64(config.AppID),
+	// 	},
+	// 	{
+	// 		Context: status.PR_Check_SizeChanges.String(),
+	// 		AppID:   github.Int64(config.AppID),
+	// 	},
+	// 	{
+	// 		Context: status.PR_Labeler.String(),
+	// 		AppID:   github.Int64(config.AppID),
+	// 	},
+	// 	{
+	// 		Context: status.PR_Check_Commits.String(),
+	// 		AppID:   github.Int64(config.AppID),
+	// 	},
+	// }); err != nil {
+	// 	ghc.Logger.Error().Err(err).Msg("Failed to set branch protection")
+	// }
 
 	ghc.Logger.Debug().Msgf("Event action is %s in Handle PullRequest", event.GetAction())
 
 	core := &corePR{
 		ghc:            ghc,
+		eDB:            db.EventDBNew(db.DBEvent),
 		event:          event,
 		labelsCategory: &[]string{},
 		labelsType:     &[]string{},
-		labelsSize:     &[]string{},
 	}
 
 	core.commitSHA = event.GetPullRequest().GetHead().GetSHA()
@@ -100,22 +100,11 @@ func (h *PullRequestHandler) Handle(ctx context.Context, eventType, deliveryID s
 		// Check if PR respect size
 		core.CheckSizePR()
 		// Check if author is COMMUNITY
-		core.Community()
+		// core.Community()
+
+		core.WriteDB()
 
 		core.ComputeLabels()
-
-	case "labeled":
-
-		rand.Seed(time.Now().UnixNano())
-		time.Sleep(time.Duration(3+rand.Intn(6-3+1)) * time.Second)
-
-		l := event.GetLabel()
-		MsgPRIssuesLabelNotExists := comments.NewCommentMsg(ghc, comments.IDIssuesLabelNotExists, comments.IssuesLabelNotExistsValues{
-			Label: l.GetName(),
-		})
-
-		// Remove comment if label added is in comment
-		MsgPRIssuesLabelNotExists.RemoveIssueComment()
 
 	default:
 		return nil
@@ -127,16 +116,70 @@ func (h *PullRequestHandler) Handle(ctx context.Context, eventType, deliveryID s
 
 type corePR struct {
 	ghc            *ghclient.GHClient
+	eDB            *db.EventDB
 	event          github.PullRequestEvent
 	commitSHA      string
 	labelsCategory *[]string
 	labelsType     *[]string
-	labelsSize     *[]string
 
 	PR_Check_Title       *status.Status
 	PR_Check_commits     *status.Status
 	PR_Check_SizeChanges *status.Status
 	PR_Labeler           *status.Status
+}
+
+// WriteDB Record data in DB
+func (core *corePR) WriteDB() {
+	x, err := json.Marshal(db.Event{
+		InstallationID: core.ghc.GetInstallationID(),
+		RepoOwner:      core.ghc.GetRepoOwner(),
+		RepoName:       core.ghc.GetRepoName(),
+		LabelsCategory: *core.labelsCategory,
+		LabelsType:     *core.labelsType,
+	})
+	if err != nil {
+		core.ghc.Logger.Error().Err(err).Msg("Failed to marshal event")
+	} else {
+		err = core.eDB.Set([]byte(core.PathDB()), x)
+		if err != nil {
+			core.ghc.Logger.Error().Err(err).Msg("Failed to set event in DB")
+		}
+	}
+}
+
+// ReadDB Read data from DB
+func (core *corePR) ReadDB() {
+	x, err := core.eDB.Get([]byte(core.PathDB()))
+	if err != nil {
+		core.ghc.Logger.Error().Err(err).Msg("Failed to get event in DB")
+	} else {
+		dbEvent := db.Event{}
+		if err = json.Unmarshal(x, &dbEvent); err != nil {
+			core.ghc.Logger.Error().Err(err).Msg("Failed to unmarshal event")
+			pretty.Println(string(x))
+		} else {
+			core.LoadLabels(dbEvent)
+		}
+	}
+}
+
+// GetLabels return the labels
+func (core *corePR) GetLabels() []string {
+	x := make([]string, 0)
+	x = append(x, *core.labelsCategory...)
+	x = append(x, *core.labelsType...)
+	return x
+}
+
+// Load labels from DB
+func (core *corePR) LoadLabels(d db.Event) {
+	core.labelsCategory = &d.LabelsCategory
+	core.labelsType = &d.LabelsType
+}
+
+// PathDB return the path of the DB
+func (core *corePR) PathDB() string {
+	return fmt.Sprintf("%d/%s/%s/%d", core.ghc.GetInstallationID(), core.ghc.GetRepoOwner(), core.ghc.GetRepoName(), core.event.PullRequest.GetNumber())
 }
 
 // CheckTitle check if the title is valid
@@ -161,20 +204,20 @@ func (core *corePR) CheckTitle() {
 		// Scope
 		if PrTitle.Scope() != "" {
 			MsgPRIssuesLabelNotExists := comments.NewCommentMsg(core.ghc, comments.IDIssuesLabelNotExists, comments.IssuesLabelNotExistsValues{
-				Label: labeler.FormatedLabelScope(PrTitle.Scope()),
+				Label: labeler.LabelScope(PrTitle.Scope()).GetLongName(),
 			})
 			if MsgPRIssuesLabelNotExists == nil {
 				core.ghc.Logger.Error().Msg("Failed to create comment")
 			}
-			_, err = core.ghc.GetLabel(labeler.FormatedLabelScope(PrTitle.Scope()))
+			_, err = core.ghc.GetLabel(labeler.LabelScope(PrTitle.Scope()).GetLongName())
 			if err != nil {
 				core.PR_Labeler.SetState(statustype.Failure)
 				if err := MsgPRIssuesLabelNotExists.EditIssueComment(); err != nil {
 					core.ghc.Logger.Error().Err(err).Msg("Failed to edit issue comment")
 				}
 			} else {
-				if _, ok := common.Find(*core.labelsCategory, labeler.FormatedLabelScope(PrTitle.Scope())); !ok {
-					*core.labelsCategory = append(*core.labelsCategory, labeler.FormatedLabelScope(PrTitle.Scope()))
+				if _, ok := common.Find(*core.labelsCategory, labeler.LabelScope(PrTitle.Scope()).GetLongName()); !ok {
+					*core.labelsCategory = append(*core.labelsCategory, labeler.LabelScope(PrTitle.Scope()).GetLongName())
 				}
 			}
 		}
@@ -191,12 +234,12 @@ func (core *corePR) CheckTitle() {
 					core.PR_Check_Title.SetState(statustype.Failure)
 					core.ghc.Logger.Error().Err(err).Msg("Failed to create label")
 				} else {
-					if _, ok := common.Find(*core.labelsType, labeler.FormatedLabelScope(v.GetLongName())); !ok {
+					if _, ok := common.Find(*core.labelsType, labeler.LabelScope(v.GetLongName()).GetLongName()); !ok {
 						*core.labelsType = append(*core.labelsType, v.GetLongName())
 					}
 				}
 			} else {
-				if _, ok := common.Find(*core.labelsType, labeler.FormatedLabelScope(v.GetLongName())); !ok {
+				if _, ok := common.Find(*core.labelsType, labeler.LabelScope(v.GetLongName()).GetLongName()); !ok {
 					*core.labelsType = append(*core.labelsType, v.GetLongName())
 				}
 			}
@@ -211,12 +254,12 @@ func (core *corePR) CheckTitle() {
 					core.PR_Check_Title.SetState(statustype.Failure)
 					core.ghc.Logger.Error().Err(err).Msg("Failed to create label")
 				} else {
-					if _, ok := common.Find(*core.labelsType, labeler.FormatedLabelScope(labeler.BreakingChange.GetLongName())); !ok {
+					if _, ok := common.Find(*core.labelsType, labeler.BreakingChange.GetLongName()); !ok {
 						*core.labelsType = append(*core.labelsType, labeler.BreakingChange.GetLongName())
 					}
 				}
 			} else {
-				if _, ok := common.Find(*core.labelsType, labeler.FormatedLabelScope(labeler.BreakingChange.GetLongName())); !ok {
+				if _, ok := common.Find(*core.labelsType, labeler.BreakingChange.GetLongName()); !ok {
 					*core.labelsType = append(*core.labelsType, labeler.BreakingChange.GetLongName())
 				}
 			}
@@ -283,13 +326,13 @@ func (core *corePR) CheckCommits() {
 				// Scope
 				if cm.Scope() != "" {
 					MsgPRIssuesLabelNotExists := comments.NewCommentMsg(core.ghc, comments.IDIssuesLabelNotExists, comments.IssuesLabelNotExistsValues{
-						Label: labeler.FormatedLabelScope(cm.Scope()),
+						Label: labeler.LabelScope(cm.Scope()).GetLongName(),
 					})
 					if MsgPRIssuesLabelNotExists == nil {
 						core.ghc.Logger.Error().Msg("Failed to create comment")
 						continue
 					}
-					_, err = core.ghc.GetLabel(labeler.FormatedLabelScope(cm.Scope()))
+					_, err = core.ghc.GetLabel(labeler.LabelScope(cm.Scope()).GetLongName())
 					if err != nil {
 						core.PR_Labeler.SetState(statustype.Failure)
 						if eer := MsgPRIssuesLabelNotExists.EditIssueComment(); err != nil {
@@ -297,8 +340,8 @@ func (core *corePR) CheckCommits() {
 							continue
 						}
 					} else {
-						if _, ok := common.Find(*core.labelsCategory, labeler.FormatedLabelScope(cm.Scope())); !ok {
-							*core.labelsCategory = append(*core.labelsCategory, labeler.FormatedLabelScope(cm.Scope()))
+						if _, ok := common.Find(*core.labelsCategory, labeler.LabelScope(cm.Scope()).GetLongName()); !ok {
+							*core.labelsCategory = append(*core.labelsCategory, labeler.LabelScope(cm.Scope()).GetLongName())
 						}
 					}
 				}
@@ -402,10 +445,10 @@ func (core *corePR) CheckSizePR() {
 			core.PR_Check_SizeChanges.SetState(statustype.Failure)
 			core.ghc.Logger.Error().Err(err).Msg("Failed to create label size")
 		} else {
-			*core.labelsSize = append(*core.labelsSize, l.GetLongName())
+			*core.labelsType = append(*core.labelsType, l.GetLongName())
 		}
 	} else {
-		*core.labelsSize = append(*core.labelsSize, l.GetLongName())
+		*core.labelsType = append(*core.labelsType, l.GetLongName())
 	}
 
 	if err := core.PR_Check_SizeChanges.IsSuccess(); err != nil {
@@ -419,7 +462,6 @@ func (core *corePR) ComputeLabels() {
 	allLabels := make([]string, 0)
 	allLabels = append(allLabels, *core.labelsType...)
 	allLabels = append(allLabels, *core.labelsCategory...)
-	allLabels = append(allLabels, *core.labelsSize...)
 
 	for _, lbl := range core.event.PullRequest.Labels {
 		core.ghc.Logger.Debug().Msgf("Label is %s", lbl.GetName())
@@ -432,13 +474,9 @@ func (core *corePR) ComputeLabels() {
 		o = append(o, lbl.GetName())
 	}
 
-	for _, lbl := range allLabels {
-		if _, ok := common.Find(o, lbl); !ok {
-			if err := core.ghc.AddLabelToIssue(lbl); err != nil {
-				core.PR_Labeler.SetState(statustype.Failure)
-				core.ghc.Logger.Error().Err(err).Msg("Failed to add label")
-			}
-		}
+	if err := core.ghc.AddLabelsToIssue(o); err != nil {
+		core.PR_Labeler.SetState(statustype.Failure)
+		core.ghc.Logger.Error().Err(err).Msg("Failed to add labels")
 	}
 
 	if err := core.PR_Labeler.IsSuccess(); err != nil {
@@ -448,19 +486,19 @@ func (core *corePR) ComputeLabels() {
 
 // Community labels
 func (core *corePR) Community() {
-	if *core.event.PullRequest.AuthorAssociation == "NONE" || *core.event.PullRequest.AuthorAssociation == "CONTRIBUTOR" {
+	if _, ok := common.Find([]string{"NONE", "CONTRIBUTOR"}, core.event.GetPullRequest().GetAuthorAssociation()); ok {
 		_, err := core.ghc.GetLabel(labeler.LabelerCommunity().GetName())
 		if err != nil {
 			err = core.ghc.CreateLabel(labeler.LabelerCommunity().GithubLabel())
 			if err != nil {
 				core.ghc.Logger.Error().Err(err).Msg("Failed to create label")
 			} else {
-				if _, ok := common.Find(*core.labelsType, labeler.FormatedLabelScope(labeler.LabelerCommunity().GetName())); !ok {
+				if _, ok := common.Find(*core.labelsType, labeler.LabelerCommunity().GetName()); !ok {
 					*core.labelsType = append(*core.labelsType, labeler.LabelerCommunity().GetName())
 				}
 			}
 		} else {
-			if _, ok := common.Find(*core.labelsType, labeler.FormatedLabelScope(labeler.LabelerCommunity().GetName())); !ok {
+			if _, ok := common.Find(*core.labelsType, labeler.LabelerCommunity().GetName()); !ok {
 				*core.labelsType = append(*core.labelsType, labeler.LabelerCommunity().GetName())
 			}
 		}

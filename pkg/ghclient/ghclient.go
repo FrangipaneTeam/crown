@@ -22,11 +22,11 @@ type GHClient struct {
 	issue       *github.Issue
 	pullRequest *github.PullRequest
 
-	repoOwner     string
-	repoName      string
-	frangipaneOrg string
-	author        string
-	issueNumber   int
+	repoOwner    string
+	repoName     string
+	organization string
+	author       string
+	issueNumber  int
 
 	Logger         zerolog.Logger
 	installationID int64
@@ -82,7 +82,7 @@ func (g *GHClient) init() {
 	g.repoOwner = g.repo.GetOwner().GetLogin()
 	g.repoName = g.repo.GetName()
 	g.author = g.issue.GetUser().GetLogin()
-	g.frangipaneOrg = FrangipaneOrg
+	g.organization = g.repoOwner
 }
 
 func (g *GHClient) newContext(ctx context.Context) {
@@ -131,7 +131,7 @@ func (g *GHClient) GetPullRequest() *github.PullRequest {
 
 // GetOrg returns the organization.
 func (g *GHClient) GetOrg() string {
-	return g.frangipaneOrg
+	return g.organization
 }
 
 // GetIssueNumber returns the issue number.
@@ -144,8 +144,8 @@ func (g *GHClient) GetInstallationID() int64 {
 	return g.installationID
 }
 
-// IsInFrangipaneOrg returns true if the user is in the FrangipaneTeam organization.
-func (g *GHClient) IsInFrangipaneOrg(user string) (bool, error) {
+// IsInOrganization returns true if the user is in the organization.
+func (g *GHClient) IsInOrganization(user string) (bool, error) {
 	inOrg, _, err := g.client.Organizations.IsMember(g.context, g.GetOrg(), user)
 	if err != nil {
 		return false, err

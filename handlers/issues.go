@@ -61,7 +61,7 @@ func (h *IssuesHandler) Handle(ctx context.Context, eventType, deliveryID string
 	case "opened":
 
 		// Author community
-		core.Community()
+		// core.Community()
 		core.ComputeLabels()
 
 	}
@@ -86,12 +86,12 @@ func (core *coreIssues) Community() {
 			if err != nil {
 				core.ghc.Logger.Error().Err(err).Msg("Failed to create label")
 			} else {
-				if _, ok := common.Find(*core.labelsType, labeler.FormatedLabelScope(labeler.LabelerCommunity().GetName())); !ok {
+				if _, ok := common.Find(*core.labelsType, labeler.LabelerCommunity().GetName()); !ok {
 					*core.labelsType = append(*core.labelsType, labeler.LabelerCommunity().GetName())
 				}
 			}
 		} else {
-			if _, ok := common.Find(*core.labelsType, labeler.FormatedLabelScope(labeler.LabelerCommunity().GetName())); !ok {
+			if _, ok := common.Find(*core.labelsType, labeler.LabelerCommunity().GetName()); !ok {
 				*core.labelsType = append(*core.labelsType, labeler.LabelerCommunity().GetName())
 			}
 		}
