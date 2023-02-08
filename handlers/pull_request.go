@@ -474,9 +474,13 @@ func (core *corePR) ComputeLabels() {
 		o = append(o, lbl.GetName())
 	}
 
-	if err := core.ghc.AddLabelsToIssue(o); err != nil {
-		core.PR_Labeler.SetState(statustype.Failure)
-		core.ghc.Logger.Error().Err(err).Msg("Failed to add labels")
+	for _, lbl := range allLabels {
+		if _, ok := common.Find(o, lbl); !ok {
+			if err := core.ghc.AddLabelToIssue(lbl); err != nil {
+				core.PR_Labeler.SetState(statustype.Failure)
+				core.ghc.Logger.Error().Err(err).Msg("Failed to add label")
+			}
+		}
 	}
 
 	if err := core.PR_Labeler.IsSuccess(); err != nil {
