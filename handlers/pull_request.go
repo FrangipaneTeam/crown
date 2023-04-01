@@ -4,6 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+
+	"github.com/azrod/common-go"
+	"github.com/google/go-github/v47/github"
+	"github.com/kr/pretty"
+	"github.com/palantir/go-githubapp/githubapp"
+	"github.com/pkg/errors"
 
 	"github.com/FrangipaneTeam/crown/handlers/comments"
 	"github.com/FrangipaneTeam/crown/handlers/status"
@@ -13,11 +20,6 @@ import (
 	"github.com/FrangipaneTeam/crown/pkg/ghclient"
 	"github.com/FrangipaneTeam/crown/pkg/labeler"
 	"github.com/FrangipaneTeam/crown/pkg/statustype"
-	"github.com/azrod/common-go"
-	"github.com/google/go-github/v47/github"
-	"github.com/kr/pretty"
-	"github.com/palantir/go-githubapp/githubapp"
-	"github.com/pkg/errors"
 )
 
 // Handler for pull request events
@@ -27,12 +29,12 @@ type PullRequestHandler struct {
 	githubapp.ClientCreator
 }
 
-// Handles returns the list of events this handler handles
+// Handles returns the list of events this handler handles.
 func (h *PullRequestHandler) Handles() []string {
 	return []string{"pull_request"}
 }
 
-// Handle processes the event
+// Handle processes the event.
 func (h *PullRequestHandler) Handle(ctx context.Context, eventType, deliveryID string, payload []byte) error {
 	var event github.PullRequestEvent
 	if err := json.Unmarshal(payload, &event); err != nil {
@@ -42,6 +44,11 @@ func (h *PullRequestHandler) Handle(ctx context.Context, eventType, deliveryID s
 	ghc, err := ghclient.NewGHClient(ctx, h, event)
 	if err != nil {
 		return errors.Wrap(err, "failed to create github client for issue comment event")
+	}
+
+	if strings.HasSuffix(ghc.GetAuthor(), "[bot]") {
+		ghc.Logger.Debug().Msg("Issue was created by a bot")
+		return nil
 	}
 
 	// if err = ghc.BranchRequiredStatusChecks([]*github.RequiredStatusCheck{
@@ -83,7 +90,6 @@ func (h *PullRequestHandler) Handle(ctx context.Context, eventType, deliveryID s
 
 	// Generic Action
 	switch event.GetAction() {
-
 	case "opened", "edited", "synchronize":
 
 		// ? Init status
@@ -111,7 +117,6 @@ func (h *PullRequestHandler) Handle(ctx context.Context, eventType, deliveryID s
 	}
 
 	return nil
-
 }
 
 type corePR struct {
@@ -128,7 +133,7 @@ type corePR struct {
 	PR_Labeler           *status.Status
 }
 
-// WriteDB Record data in DB
+// WriteDB Record data in DB.
 func (core *corePR) WriteDB() {
 	x, err := json.Marshal(db.Event{
 		InstallationID: core.ghc.GetInstallationID(),
@@ -147,7 +152,7 @@ func (core *corePR) WriteDB() {
 	}
 }
 
-// ReadDB Read data from DB
+// ReadDB Read data from DB.
 func (core *corePR) ReadDB() {
 	x, err := core.eDB.Get([]byte(core.PathDB()))
 	if err != nil {
@@ -163,7 +168,7 @@ func (core *corePR) ReadDB() {
 	}
 }
 
-// GetLabels return the labels
+// GetLabels return the labels.
 func (core *corePR) GetLabels() []string {
 	x := make([]string, 0)
 	x = append(x, *core.labelsCategory...)
@@ -171,19 +176,19 @@ func (core *corePR) GetLabels() []string {
 	return x
 }
 
-// Load labels from DB
+// Load labels from DB.
 func (core *corePR) LoadLabels(d db.Event) {
 	core.labelsCategory = &d.LabelsCategory
 	core.labelsType = &d.LabelsType
 }
 
-// PathDB return the path of the DB
+// PathDB return the path of the DB.
 func (core *corePR) PathDB() string {
 	return fmt.Sprintf("%d/%s/%s/%d", core.ghc.GetInstallationID(), core.ghc.GetRepoOwner(), core.ghc.GetRepoName(), core.event.PullRequest.GetNumber())
 }
 
 // CheckTitle check if the title is valid
-// Check if the PullRequest have a conventional commit title format
+// Check if the PullRequest have a conventional commit title format.
 func (core *corePR) CheckTitle() {
 	// ? ParseTitle
 	MsgPRTitleInvalid := comments.NewCommentMsg(core.ghc, comments.IDPRTitleInvalid, comments.PRTitleInvalidValues{
@@ -200,7 +205,6 @@ func (core *corePR) CheckTitle() {
 		}
 		MsgPRTitleInvalid.EditIssueComment()
 	} else {
-
 		// Scope
 		if PrTitle.Scope() != "" {
 			MsgPRIssuesLabelNotExists := comments.NewCommentMsg(core.ghc, comments.IDIssuesLabelNotExists, comments.IssuesLabelNotExistsValues{
@@ -280,20 +284,17 @@ func (core *corePR) CheckTitle() {
 }
 
 // CheckCommits check if the commits are valid
-// Check if the PullRequest have a conventional commit format
+// Check if the PullRequest have a conventional commit format.
 func (core *corePR) CheckCommits() {
-
 	// ? ParseCommits
 	commits, err := core.ghc.GetCommits()
 	if err != nil {
 		core.PR_Check_commits.SetState(statustype.Failure)
 		core.ghc.Logger.Error().Err(err).Msg("Failed to get commits")
 	} else {
-
 		allCommitsSHA := make([]string, 0)
 
 		for _, commit := range commits {
-
 			MsgPRCommitInvalid := comments.NewCommentMsg(core.ghc, comments.IDPRCommitInvalid, comments.PRCommitInvalidValues{
 				CommitMsg: commit.GetCommit().GetMessage(),
 				CommitSHA: commit.GetSHA(),
@@ -316,7 +317,6 @@ func (core *corePR) CheckCommits() {
 					continue
 				}
 			} else {
-
 				// Remove issue comment if commit message is valid
 				if err := MsgPRCommitInvalid.RemoveIssueComment(); err != nil {
 					core.ghc.Logger.Error().Err(err).Msg("Failed to remove issue comment")
@@ -395,7 +395,6 @@ func (core *corePR) CheckCommits() {
 				if err := core.PR_Check_commits.IsSuccess(); err != nil {
 					core.ghc.Logger.Error().Err(err).Msg("Failed to set status")
 				}
-
 			}
 		}
 
@@ -420,9 +419,8 @@ func (core *corePR) CheckCommits() {
 }
 
 // CheckSizePR check size of PR
-// Check if the PR is too big
+// Check if the PR is too big.
 func (core *corePR) CheckSizePR() {
-
 	// * Calcul Additions and Deletions
 	size := conventionalsizepr.NewPRSize(core.event.PullRequest.GetAdditions(), core.event.PullRequest.GetDeletions())
 
@@ -456,7 +454,7 @@ func (core *corePR) CheckSizePR() {
 	}
 }
 
-// ComputeLabels compute labels
+// ComputeLabels compute labels.
 func (core *corePR) ComputeLabels() {
 	o := make([]string, 0)
 	allLabels := make([]string, 0)
@@ -488,7 +486,7 @@ func (core *corePR) ComputeLabels() {
 	}
 }
 
-// Community labels
+// Community labels.
 func (core *corePR) Community() {
 	if _, ok := common.Find([]string{"NONE", "CONTRIBUTOR"}, core.event.GetPullRequest().GetAuthorAssociation()); ok {
 		_, err := core.ghc.GetLabel(labeler.LabelerCommunity().GetName())
