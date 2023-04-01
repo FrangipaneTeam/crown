@@ -47,7 +47,7 @@ func (h *PullRequestHandler) Handle(ctx context.Context, eventType, deliveryID s
 	}
 
 	if strings.HasSuffix(ghc.GetAuthor(), "[bot]") {
-		ghc.Logger.Debug().Msg("Issue was created by a bot")
+		ghc.Logger.Warn().Msg("PullRequest was created by a bot")
 		return nil
 	}
 

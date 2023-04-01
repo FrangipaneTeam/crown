@@ -81,7 +81,12 @@ func NewGHClient(ctx context.Context, ghapp githubapp.ClientCreator, event inter
 func (g *GHClient) init() {
 	g.repoOwner = g.repo.GetOwner().GetLogin()
 	g.repoName = g.repo.GetName()
-	g.author = g.issue.GetUser().GetLogin()
+	if g.issue != nil {
+		g.author = g.issue.GetUser().GetLogin()
+	}
+	if g.pullRequest != nil {
+		g.author = g.pullRequest.GetUser().GetLogin()
+	}
 	g.organization = g.repoOwner
 }
 
