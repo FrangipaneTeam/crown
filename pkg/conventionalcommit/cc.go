@@ -11,8 +11,10 @@ type Cc struct {
 	CommitScope CommitScope
 }
 
-type CommitType string
-type CommitScope string
+type (
+	CommitType  string
+	CommitScope string
+)
 
 // String returns the string representation of a commit type.
 func (c CommitType) String() string {
@@ -26,7 +28,6 @@ func (c CommitScope) String() string {
 
 // ParseCommit parses a commit message and returns a conventional commit.
 func ParseCommit(msg string) (*Cc, error) {
-
 	c, err := parser.New().Parse(msg)
 	if err != nil {
 		return nil, err
@@ -37,14 +38,15 @@ func ParseCommit(msg string) (*Cc, error) {
 	}
 
 	x.commitType()
-	x.commitScope()
+	if err := x.commitScope(); err != nil {
+		return nil, err
+	}
 
 	return x, nil
 }
 
 // ParseCommits parses a list of commit messages and returns a list of conventional commits.
 func ParseCommits(msgs []string) ([]*Cc, error) {
-
 	var commits []*Cc
 
 	for _, msg := range msgs {

@@ -32,19 +32,19 @@ var CommitTypeList = []string{
 
 func (l *Cc) commitType() {
 	switch l.Type() {
-	case CommitType(FeatureLabel).String():
+	case FeatureLabel.String():
 		l.CommitType = FeatureLabel
-	case CommitType(FixLabel).String():
+	case FixLabel.String():
 		l.CommitType = FixLabel
-	case CommitType(ChoreLabel).String():
+	case ChoreLabel.String():
 		l.CommitType = ChoreLabel
-	case CommitType(RefactorLabel).String():
+	case RefactorLabel.String():
 		l.CommitType = RefactorLabel
-	case CommitType(DocsLabel).String():
+	case DocsLabel.String():
 		l.CommitType = DocsLabel
-	case CommitType(StyleLabel).String():
+	case StyleLabel.String():
 		l.CommitType = StyleLabel
-	case CommitType(TestLabel).String():
+	case TestLabel.String():
 		l.CommitType = TestLabel
 	default:
 		l.CommitType = ""

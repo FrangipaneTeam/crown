@@ -33,7 +33,6 @@ type GHClient struct {
 }
 
 func NewGHClient(ctx context.Context, ghapp githubapp.ClientCreator, event interface{}) (*GHClient, error) {
-
 	var ghClient *GHClient
 
 	switch event := event.(type) {
@@ -64,14 +63,13 @@ func NewGHClient(ctx context.Context, ghapp githubapp.ClientCreator, event inter
 
 	if ghapp == nil {
 		return nil, errors.New("githubapp is nil")
-	} else {
-		ghClient.githubapp = ghapp
 	}
+
+	ghClient.githubapp = ghapp
 
 	ghClient.init()
 	ghClient.newContext(ctx)
-	err := ghClient.newGHClient()
-	if err != nil {
+	if err := ghClient.newGHClient(); err != nil {
 		return nil, err
 	}
 

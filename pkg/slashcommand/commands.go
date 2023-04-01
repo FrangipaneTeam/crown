@@ -29,12 +29,12 @@ func findVerb(cmd string) (Verb, error) {
 	}
 }
 
-type SlashCommandLabel struct {
+type Label struct {
 	Action Command
 	Verb   Verb
 	Label  string
 }
 
-type SlashCommandTrack struct {
+type Track struct {
 	Action Command
 }

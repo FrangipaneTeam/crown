@@ -7,10 +7,15 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/FrangipaneTeam/crown/pkg/config"
-	"github.com/FrangipaneTeam/crown/pkg/db"
 	"github.com/bradleyfalzon/ghinstallation"
 	"github.com/google/go-github/v47/github"
+
+	"github.com/FrangipaneTeam/crown/pkg/config"
+	"github.com/FrangipaneTeam/crown/pkg/db"
+)
+
+const (
+	closed = "closed"
 )
 
 type TrackIssue struct {
@@ -18,10 +23,9 @@ type TrackIssue struct {
 	base trackBase
 }
 
-func TrackNewIssue(repoOwner, repoName string, installationID int64, issueID int64, TrackIssueURL string) error {
-
+func TrackNewIssue(repoOwner, repoName string, installationID, issueID int64, trackIssueURL string) error {
 	// Parse TrackIssueURL
-	ghRepository, err := parseTrackIssueURL(TrackIssueURL)
+	ghRepository, err := parseTrackIssueURL(trackIssueURL)
 	if err != nil {
 		return err
 	}
@@ -36,12 +40,12 @@ func TrackNewIssue(repoOwner, repoName string, installationID int64, issueID int
 				logger.Debug().Msgf("Issue already tracked: %s", pathDB)
 				t.AddSourceRepository(repoOwner, repoName, issueID)
 
-				tJson, err := json.Marshal(t)
+				tJSON, err := json.Marshal(t)
 				if err != nil {
 					return err
 				}
 
-				if err = db.TrackDB().Set(db.Byte(pathDB), tJson); err != nil {
+				if err = db.TrackDB().Set(db.Byte(pathDB), tJSON); err != nil {
 					return err
 				}
 			} else {
@@ -51,7 +55,6 @@ func TrackNewIssue(repoOwner, repoName string, installationID int64, issueID int
 			return err
 		}
 	} else {
-
 		// Create TrackIssue
 		t := &TrackIssue{
 			base: trackBase{
@@ -73,22 +76,18 @@ func TrackNewIssue(repoOwner, repoName string, installationID int64, issueID int
 		t.base.UpdateAt.Now()
 		t.base.ClosedAt.Now()
 
-		tJson, err := json.Marshal(t.base)
+		tJSON, err := json.Marshal(t.base)
 		if err != nil {
 			return err
 		}
 
-		if err = db.TrackDB().Set(db.Byte(pathDB), tJson); err != nil {
-			return err
-		}
-
-		return nil
+		return db.TrackDB().Set(db.Byte(pathDB), tJSON)
 	}
 
 	return nil
 }
 
-// newGithubClient returns a new github client
+// newGithubClient returns a new github client.
 func (c *TrackIssue) newGithubClient() error {
 	if config.AppID == 0 || c.base.InstallationID == 0 {
 		return fmt.Errorf("app id or installation id is not set")
@@ -112,18 +111,17 @@ func (c *TrackIssue) newGithubClient() error {
 }
 
 // githubParams returns the github params for the issue
-// Returns the owner, the repo and the issue number
-func (c *GithubRepository) githubParams() (string, string, int) {
-	return c.RepoOwner, c.RepoName, int(c.ID)
+// Returns the owner, the repo and the issue number.
+func (g *GithubRepository) githubParams() (string, string, int) {
+	return g.RepoOwner, g.RepoName, int(g.ID)
 }
 
-// ScanIsNecessary checks if the issue is already tracked
+// ScanIsNecessary checks if the issue is already tracked.
 func (c *TrackIssue) ScanIsNecessary() bool {
 	return c.base.LastScanAt.Time.Before(time.Now().Add(-intervalScanIssue)) || !c.base.StatusOfLastScan
-
 }
 
-// Scan scans the issue
+// Scan scans the issue.
 func (c *TrackIssue) Scan() error {
 	logger.Debug().Msgf("Start scan issue %s/%s/%d", c.base.TargetRepository.RepoOwner, c.base.TargetRepository.RepoName, c.base.TargetRepository.ID)
 
@@ -190,8 +188,8 @@ func (c *TrackIssue) Scan() error {
 		switch event.GetEvent() {
 		case "commented":
 			newUpdate = true
-		case "closed":
-			c.base.Status = "closed"
+		case closed:
+			c.base.Status = closed
 			newUpdate = true
 		}
 	}
@@ -215,12 +213,12 @@ func (c *TrackIssue) Scan() error {
 	return nil
 }
 
-// IsClose checks if the issue is closed
+// IsClose checks if the issue is closed.
 func (c *TrackIssue) IsClose() bool {
-	return c.base.Status == "closed"
+	return c.base.Status == closed
 }
 
-// PublishMessageClosed publish the message when the issue is closed
+// PublishMessageClosed publish the message when the issue is closed.
 func (c *TrackIssue) PublishMessageClosed() error {
 	// TODO add real message
 	for _, source := range c.base.SourcesRepository {
@@ -234,7 +232,7 @@ func (c *TrackIssue) PublishMessageClosed() error {
 	return nil
 }
 
-// PublishMessageStatus publish the status of the scan
+// PublishMessageStatus publish the status of the scan.
 func (c *TrackIssue) PublishMessageStatus() error {
 	// TODO add real message
 	for _, source := range c.base.SourcesRepository {

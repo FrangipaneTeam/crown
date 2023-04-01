@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/FrangipaneTeam/crown/pkg/ghclient"
 	"github.com/google/go-github/v47/github"
+
+	"github.com/FrangipaneTeam/crown/pkg/ghclient"
 )
 
 var (
@@ -35,15 +36,15 @@ func (c *commentExtra) SetValue(v interface{}) {
 	c.value = v
 }
 
-// injectBotID injects the bot id in the message
+// injectBotID injects the bot id in the message.
 func (c commentExtra) injectBotExtras() string {
-	switch c.value.(type) {
+	switch x := c.value.(type) {
 	case int, int8, int16, int32, int64:
-		return fmt.Sprintf("<!-- %s: %d -->\n", c.key, c.value)
+		return fmt.Sprintf("<!-- %s: %d -->\n", c.key, x)
 	case BotCommentID:
-		return fmt.Sprintf("<!-- %s: %d -->\n", c.key, c.value.(BotCommentID))
+		return fmt.Sprintf("<!-- %s: %d -->\n", c.key, x)
 	default:
-		return fmt.Sprintf("<!-- %s: %s -->\n", c.key, c.value)
+		return fmt.Sprintf("<!-- %s: %s -->\n", c.key, x)
 	}
 }
 
@@ -56,7 +57,6 @@ type commentMsg struct {
 	msgComputed string
 	extra       map[BotCommentExtra]commentExtra
 
-	args   []interface{}
 	values interface{}
 
 	// IsIssueCommentExist checks if the comment ID exists
@@ -75,15 +75,15 @@ type commentMsg struct {
 	RemoveIssueComment func() error
 }
 
-// setExtra sets the extra value
+// setExtra sets the extra value.
 func (c *commentMsg) setExtra(extra BotCommentExtra, v interface{}) {
 	w := issuesCommentsExtra[extra]
 	w.SetValue(v)
 	c.extra[extra] = w
 }
 
-// NewCommentMsg creates a new comment message
-func NewCommentMsg(ghc *ghclient.GHClient, id BotCommentID, values interface{}) *commentMsg {
+// NewCommentMsg creates a new comment message.
+func NewCommentMsg(ghc *ghclient.GHClient, id BotCommentID, values interface{}) *commentMsg { //nolint:gocyclo,revive
 	x := &commentMsg{
 		ghc:        ghc,
 		id:         id,
@@ -92,21 +92,21 @@ func NewCommentMsg(ghc *ghclient.GHClient, id BotCommentID, values interface{}) 
 		values:     values,
 	}
 
-	x.setExtra(ExtraBotID, id.Id())
+	x.setExtra(ExtraBotID, id.ID())
 	x.IsIssueCommentExist = func() (commentID int64, exist bool) {
 		cts, err := x.ghc.ListComments()
 		if err != nil {
 			x.ghc.Logger.Error().Err(err).Msg("Failed to get comments")
-		} else {
-			if len(cts) > 0 {
-				for _, comment := range cts {
-					if ok, value := ExtraIssueComment(comment.GetBody(), id, ExtraBotID); ok && id.IsValid(value) {
-						return comment.GetID(), true
-					}
+			return 0, false
+		}
+
+		if len(cts) > 0 {
+			for _, comment := range cts {
+				if ok, value := ExtraIssueComment(comment.GetBody(), id, ExtraBotID); ok && id.IsValid(value) {
+					return comment.GetID(), true
 				}
 			}
 		}
-
 		return 0, false
 	}
 	x.CreateIssueComment = func() error {
@@ -129,7 +129,7 @@ func NewCommentMsg(ghc *ghclient.GHClient, id BotCommentID, values interface{}) 
 				Body: x.createIssueMessage(),
 			}
 			if err := x.ghc.EditComment(commentID, prComment); err != nil {
-				if err.(*github.ErrorResponse).Response.StatusCode == http.StatusNotFound {
+				if err.(*github.ErrorResponse).Response.StatusCode == http.StatusNotFound { //nolint:errorlint
 					return x.CreateIssueComment()
 				}
 				x.ghc.Logger.Error().Err(err).Int64("commentID", commentID).Msg("Failed to edit comment on issue")
@@ -185,20 +185,18 @@ func NewCommentMsg(ghc *ghclient.GHClient, id BotCommentID, values interface{}) 
 				cts, err := x.ghc.ListComments()
 				if err != nil {
 					x.ghc.Logger.Error().Err(err).Msg("Failed to get comments")
-				} else {
-
-					if len(cts) > 0 {
-						for _, comment := range cts {
-							if ok, value := ExtraIssueComment(comment.GetBody(), id, ExtraBotID); ok && id.IsValid(value) {
-								ghc.Logger.Debug().Msg("Found ExtraBotID")
-								if ok, label := ExtraIssueComment(comment.GetBody(), id, ExtraBotLabel); ok && label == vals.Label {
-									return comment.GetID(), true
-								}
+					return 0, false
+				}
+				if len(cts) > 0 {
+					for _, comment := range cts {
+						if ok, value := ExtraIssueComment(comment.GetBody(), id, ExtraBotID); ok && id.IsValid(value) {
+							ghc.Logger.Debug().Msg("Found ExtraBotID")
+							if ok, label := ExtraIssueComment(comment.GetBody(), id, ExtraBotLabel); ok && label == vals.Label {
+								return comment.GetID(), true
 							}
 						}
 					}
 				}
-
 				return 0, false
 			}
 		} else {
@@ -226,18 +224,17 @@ func NewCommentMsg(ghc *ghclient.GHClient, id BotCommentID, values interface{}) 
 				cts, err := x.ghc.ListComments()
 				if err != nil {
 					x.ghc.Logger.Error().Err(err).Msg("Failed to get comments")
-				} else {
-					if len(cts) > 0 {
-						for _, comment := range cts {
-							if ok, value := ExtraIssueComment(comment.GetBody(), id, ExtraBotID); ok && id.IsValid(value) {
-								if ok, commitID := ExtraIssueComment(comment.GetBody(), id, ExtraCommitID); ok && commitID == vals.CommitSHA {
-									return comment.GetID(), true
-								}
+					return 0, false
+				}
+				if len(cts) > 0 {
+					for _, comment := range cts {
+						if ok, value := ExtraIssueComment(comment.GetBody(), id, ExtraBotID); ok && id.IsValid(value) {
+							if ok, commitID := ExtraIssueComment(comment.GetBody(), id, ExtraCommitID); ok && commitID == vals.CommitSHA {
+								return comment.GetID(), true
 							}
 						}
 					}
 				}
-
 				return 0, false
 			}
 		} else {
@@ -252,20 +249,19 @@ func NewCommentMsg(ghc *ghclient.GHClient, id BotCommentID, values interface{}) 
 	return x
 }
 
-// createIssueMessage creates a comment on the issue if the title is not conventional issue format
-func (n *commentMsg) createIssueMessage() *string {
-
+// createIssueMessage creates a comment on the issue if the title is not conventional issue format.
+func (c *commentMsg) createIssueMessage() *string {
 	var msg string
-	for _, extra := range n.extra {
+	for _, extra := range c.extra {
 		msg += extra.injectBotExtras()
 	}
 
-	if n.msgComputed == "" {
-		n.ghc.Logger.Error().Msg("msgComputed is empty")
+	if c.msgComputed == "" {
+		c.ghc.Logger.Error().Msg("msgComputed is empty")
 		return nil
 	}
 
-	msg += n.msgComputed
+	msg += c.msgComputed
 
 	return &msg
 }

@@ -6,6 +6,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/azrod/common-go"
+	"github.com/google/go-github/v47/github"
+	"github.com/palantir/go-githubapp/githubapp"
+	"github.com/pkg/errors"
+
 	"github.com/FrangipaneTeam/crown/handlers/comments"
 	"github.com/FrangipaneTeam/crown/handlers/status"
 	"github.com/FrangipaneTeam/crown/pkg/db"
@@ -13,17 +18,13 @@ import (
 	"github.com/FrangipaneTeam/crown/pkg/labeler"
 	"github.com/FrangipaneTeam/crown/pkg/slashcommand"
 	"github.com/FrangipaneTeam/crown/pkg/statustype"
-	"github.com/azrod/common-go"
-	"github.com/google/go-github/v47/github"
-	"github.com/palantir/go-githubapp/githubapp"
-	"github.com/pkg/errors"
 )
 
 type IssueCommentHandler struct {
 	githubapp.ClientCreator
 }
 
-// Handles returns the list of events this handler handles
+// Handles returns the list of events this handler handles.
 func (h *IssueCommentHandler) Handles() []string {
 	return []string{"issue_comment"}
 }
@@ -35,14 +36,14 @@ type coreIssueComment struct {
 	labelsCategory *[]string
 	labelsType     *[]string
 
-	PR_Check_Title       *status.Status
-	PR_Check_commits     *status.Status
-	PR_Check_SizeChanges *status.Status
-	PR_Labeler           *status.Status
+	PR_Check_Title       *status.Status //nolint:revive,stylecheck
+	PR_Check_commits     *status.Status //nolint:revive,stylecheck
+	PR_Check_SizeChanges *status.Status //nolint:revive,stylecheck
+	PR_Labeler           *status.Status //nolint:revive,stylecheck
 }
 
-// Handle processes the event
-func (h *IssueCommentHandler) Handle(ctx context.Context, eventType, deliveryID string, payload []byte) error {
+// Handle processes the event.
+func (h *IssueCommentHandler) Handle(ctx context.Context, _, _ string, payload []byte) error {
 	var event github.IssueCommentEvent
 	if err := json.Unmarshal(payload, &event); err != nil {
 		return errors.Wrap(err, "failed to parse issue comment event payload")
@@ -86,10 +87,10 @@ func (h *IssueCommentHandler) Handle(ctx context.Context, eventType, deliveryID 
 
 	if ok, _ := ghc.IsInOrganization(user.GetLogin()); ok {
 		if foundSlashCommand, cmd, err := slashcommand.FindSlashCommand(commentBody); foundSlashCommand {
-			switch cmd := cmd.(type) {
-			case slashcommand.SlashCommandLabel:
+			switch cmd := cmd.(type) { //nolint:gocritic
+			case slashcommand.Label:
 				ghc.Logger.Debug().Msgf("Found slash command %s with verb %s from %s", cmd.Action, cmd.Verb, user.GetName())
-				switch cmd.Action {
+				switch cmd.Action { //nolint:gocritic
 				case slashcommand.CommandLabel:
 					label := labeler.LabelScope(cmd.Label)
 					switch cmd.Verb {
@@ -111,7 +112,9 @@ func (h *IssueCommentHandler) Handle(ctx context.Context, eventType, deliveryID 
 						})
 
 						// Remove comment if label added is in comment
-						MsgPRIssuesLabelNotExists.RemoveIssueComment()
+						if err := MsgPRIssuesLabelNotExists.RemoveIssueComment(); err != nil {
+							ghc.Logger.Err(err).Msg("failed to remove comment")
+						}
 
 						*core.labelsCategory = append(*core.labelsCategory, label.GetLongName())
 
@@ -123,7 +126,6 @@ func (h *IssueCommentHandler) Handle(ctx context.Context, eventType, deliveryID 
 							}
 						}
 					}
-
 				}
 			}
 			core.ComputeLabels()
@@ -137,7 +139,7 @@ func (h *IssueCommentHandler) Handle(ctx context.Context, eventType, deliveryID 
 	return nil
 }
 
-// GetLabels return the labels
+// GetLabels return the labels.
 func (core *coreIssueComment) GetLabels() []string {
 	x := make([]string, 0)
 	x = append(x, *core.labelsCategory...)
@@ -145,18 +147,18 @@ func (core *coreIssueComment) GetLabels() []string {
 	return x
 }
 
-// Load labels from DB
+// Load labels from DB.
 func (core *coreIssueComment) LoadLabels(d db.Event) {
 	core.labelsCategory = &d.LabelsCategory
 	core.labelsType = &d.LabelsType
 }
 
-// PathDB return the path of the DB
+// PathDB return the path of the DB.
 func (core *coreIssueComment) PathDB() string {
 	return fmt.Sprintf("%d/%s/%s/%d", core.ghc.GetInstallationID(), core.ghc.GetRepoOwner(), core.ghc.GetRepoName(), core.event.GetIssue().GetNumber())
 }
 
-// ComputeLabels compute labels
+// ComputeLabels compute labels.
 func (core *coreIssueComment) ComputeLabels() {
 	o := make([]string, 0)
 	allLabels := make([]string, 0)
@@ -167,7 +169,9 @@ func (core *coreIssueComment) ComputeLabels() {
 		core.ghc.Logger.Debug().Msgf("Label is %s", lbl.GetName())
 		if _, ok := common.Find(allLabels, lbl.GetName()); !ok {
 			if err := core.ghc.RemoveLabelForIssue(lbl.GetName()); err != nil {
-				core.PR_Labeler.SetState(statustype.Failure)
+				if err := core.PR_Labeler.SetState(statustype.Failure); err != nil {
+					core.ghc.Logger.Error().Err(err).Msg("Failed to set status")
+				}
 				core.ghc.Logger.Error().Err(err).Msg("Failed to remove label")
 			}
 		}
@@ -177,7 +181,9 @@ func (core *coreIssueComment) ComputeLabels() {
 	for _, lbl := range allLabels {
 		if _, ok := common.Find(o, lbl); !ok {
 			if err := core.ghc.AddLabelToIssue(lbl); err != nil {
-				core.PR_Labeler.SetState(statustype.Failure)
+				if err := core.PR_Labeler.SetState(statustype.Failure); err != nil {
+					core.ghc.Logger.Error().Err(err).Msg("Failed to set status")
+				}
 				core.ghc.Logger.Error().Err(err).Msg("Failed to add label")
 			}
 		}

@@ -31,7 +31,6 @@ func (g *GHClient) SearchLabelInIssue(pattern string) ([]*github.Label, error) {
 	}
 
 	return foundLabels, nil
-
 }
 
 // GetLabelsInIssue returns the labels of the issue.

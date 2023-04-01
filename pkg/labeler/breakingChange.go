@@ -7,9 +7,9 @@ const (
 	BreakingChange         LabelerBreakingChange = 666
 )
 
-type LabelerBreakingChange int
+type LabelerBreakingChange int //nolint:revive
 
-// GetGithubLabel returns the github label of the breaking change
+// GetGithubLabel returns the github label of the breaking change.
 func (c LabelerBreakingChange) GithubLabel() github.Label {
 	return github.Label{
 		Name:  github.String(breakingChangeLongName),
@@ -17,7 +17,7 @@ func (c LabelerBreakingChange) GithubLabel() github.Label {
 	}
 }
 
-// GetLongName returns the long name of the breaking change
+// GetLongName returns the long name of the breaking change.
 func (c LabelerBreakingChange) GetLongName() string {
 	return breakingChangeLongName
 }

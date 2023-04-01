@@ -7,20 +7,19 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/FrangipaneTeam/crown/handlers"
-	"github.com/FrangipaneTeam/crown/pkg/config"
-	"github.com/FrangipaneTeam/crown/pkg/db"
-	"github.com/FrangipaneTeam/crown/pkg/tracker"
 	"github.com/gregjones/httpcache"
 	"github.com/palantir/go-githubapp/githubapp"
 	"github.com/rcrowley/go-metrics"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+
+	"github.com/FrangipaneTeam/crown/handlers"
+	"github.com/FrangipaneTeam/crown/pkg/config"
+	"github.com/FrangipaneTeam/crown/pkg/db"
+	"github.com/FrangipaneTeam/crown/pkg/tracker"
 )
 
-var (
-	Db *db.DB
-)
+// var Db *db.DB
 
 func main() {
 	config, err := config.ReadConfig("config.yaml")
@@ -97,7 +96,13 @@ func main() {
 
 	addr := fmt.Sprintf("%s:%d", config.Server.Address, config.Server.Port)
 	logger.Info().Msgf("Starting server on %s...", addr)
-	err = http.ListenAndServe(addr, nil)
+
+	server := &http.Server{
+		Addr:              addr,
+		ReadHeaderTimeout: 3 * time.Second,
+	}
+
+	err = server.ListenAndServe()
 	if err != nil {
 		panic(err)
 	}
