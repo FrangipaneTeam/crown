@@ -22,7 +22,7 @@ type Config struct {
 	AppConfig CrownConfig `yaml:"app_configuration"`
 }
 
-// DBConfig
+// DBConfig.
 type DBConfig struct {
 	Path string `yaml:"path"`
 }

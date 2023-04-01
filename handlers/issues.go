@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/FrangipaneTeam/crown/pkg/ghclient"
-	"github.com/FrangipaneTeam/crown/pkg/labeler"
 	"github.com/azrod/common-go"
 	"github.com/google/go-github/v47/github"
 	"github.com/palantir/go-githubapp/githubapp"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+
+	"github.com/FrangipaneTeam/crown/pkg/ghclient"
+	"github.com/FrangipaneTeam/crown/pkg/labeler"
 )
 
 // Handler for issues events
@@ -21,13 +22,13 @@ type IssuesHandler struct {
 	githubapp.ClientCreator
 }
 
-// Handles returns the list of events this handler handles
+// Handles returns the list of events this handler handles.
 func (h *IssuesHandler) Handles() []string {
 	return []string{"issues"}
 }
 
-// Handle processes the event
-func (h *IssuesHandler) Handle(ctx context.Context, eventType, deliveryID string, payload []byte) error {
+// Handle processes the event.
+func (h *IssuesHandler) Handle(ctx context.Context, _, _ string, payload []byte) error {
 	var event github.IssuesEvent
 	if err := json.Unmarshal(payload, &event); err != nil {
 		return errors.Wrap(err, "failed to parse issues event payload")
@@ -57,17 +58,18 @@ func (h *IssuesHandler) Handle(ctx context.Context, eventType, deliveryID string
 		return nil
 	}
 
-	switch event.GetAction() {
+	switch event.GetAction() { //nolint:gocritic
 	case "opened":
 
 		// Author community
 		// core.Community()
-		core.ComputeLabels()
-
+		if err := core.ComputeLabels(); err != nil {
+			ghc.Logger.Error().Err(err).Msg("Failed to compute labels")
+			return err
+		}
 	}
 
 	return nil
-
 }
 
 type coreIssues struct {
@@ -77,7 +79,7 @@ type coreIssues struct {
 	labelsType     *[]string
 }
 
-// Community labels
+// Community labels.
 func (core *coreIssues) Community() {
 	if *core.event.Issue.AuthorAssociation == "NONE" || *core.event.Issue.AuthorAssociation == "CONTRIBUTOR" {
 		_, err := core.ghc.GetLabel(labeler.LabelerCommunity().GetName())
@@ -98,9 +100,8 @@ func (core *coreIssues) Community() {
 	}
 }
 
-// ComputeLabels compute labels to add to the issue
+// ComputeLabels compute labels to add to the issue.
 func (core *coreIssues) ComputeLabels() error {
-
 	o := make([]string, 0)
 	allLabels := make([]string, 0)
 	allLabels = append(allLabels, *core.labelsCategory...)

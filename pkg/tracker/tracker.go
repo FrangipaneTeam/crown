@@ -1,3 +1,4 @@
+//nolint:deadcode,varcheck
 package tracker
 
 import (
@@ -7,14 +8,13 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/FrangipaneTeam/crown/pkg/common"
 	"github.com/google/go-github/v47/github"
 	"github.com/rs/zerolog"
+
+	"github.com/FrangipaneTeam/crown/pkg/common"
 )
 
-var (
-	logger zerolog.Logger
-)
+var logger zerolog.Logger
 
 type TypeResource string
 
@@ -34,18 +34,18 @@ type GithubRepository struct {
 }
 
 // GetRepoOwner returns the owner of the repository.
-func (r *GithubRepository) GetRepoOwner() string {
-	return r.RepoOwner
+func (g *GithubRepository) GetRepoOwner() string {
+	return g.RepoOwner
 }
 
 // GetRepoName returns the name of the repository.
-func (r *GithubRepository) GetRepoName() string {
-	return r.RepoName
+func (g *GithubRepository) GetRepoName() string {
+	return g.RepoName
 }
 
 // GetID returns the ID of the repository.
-func (r *GithubRepository) GetID() int64 {
-	return r.ID
+func (g *GithubRepository) GetID() int64 {
+	return g.ID
 }
 
 type GithubRename struct {
@@ -156,7 +156,7 @@ type GithubTimeline struct {
 	SubmittedAt Timestamp `json:"submitted_at,omitempty"`
 }
 
-// generatePathDB generate the path of the key in the database
+// generatePathDB generate the path of the key in the database.
 func generatePathDB(x TypeResource, installationID int64, repoOwner, repoName string, repoID int64) string {
 	// format of the key in the database is
 	// <TypeResource>/<InstallationID>/<RepoOwner>/<RepoName>/<RepoID>
@@ -164,12 +164,11 @@ func generatePathDB(x TypeResource, installationID int64, repoOwner, repoName st
 	return fmt.Sprintf("%s/%d/%s/%s/%d", x, installationID, repoOwner, repoName, repoID)
 }
 
-func (g *trackBase) PathDB(x TypeResource) string {
+func (t *trackBase) PathDB(x TypeResource) string {
 	// format of the key in the database is
 	// <TypeResource>/<InstallationID>/<RepoOwner>/<RepoName>/<RepoID>
 	// example: issue/1234556789/owner/repo/8
-	return generatePathDB(x, g.GetInstallationID(), g.GetTargetRepository().GetRepoOwner(), g.GetTargetRepository().GetRepoName(), g.GetTargetRepository().GetID())
-
+	return generatePathDB(x, t.GetInstallationID(), t.GetTargetRepository().GetRepoOwner(), t.GetTargetRepository().GetRepoName(), t.GetTargetRepository().GetID())
 }
 
 type trackCore struct {
@@ -179,7 +178,6 @@ type trackCore struct {
 	cancel context.CancelFunc
 }
 type trackBase struct {
-
 	// LastScanAt is the timestamp of the last scan
 	LastScanAt Timestamp `json:"last_scan_at"`
 	// StatusOfLastScan is the status of the last scan
@@ -203,67 +201,67 @@ type trackBase struct {
 	Timeline []GithubTimeline
 }
 
-// IsExist check if the ID is already in the list
-func (t *trackBase) IsExist(ID int64) bool {
+// IsExist check if the ID is already in the list.
+func (t *trackBase) IsExist(iD int64) bool {
 	for _, x := range t.SourcesRepository {
-		if x.GetID() == ID {
+		if x.GetID() == iD {
 			return true
 		}
 	}
 	return false
 }
 
-// GetLastScanAt return the last scan timestamp
+// GetLastScanAt return the last scan timestamp.
 func (t *trackBase) GetLastScanAt() Timestamp {
 	return t.LastScanAt
 }
 
-// GetStatusOfLastScan return the status of the last scan
+// GetStatusOfLastScan return the status of the last scan.
 func (t *trackBase) GetStatusOfLastScan() bool {
 	return t.StatusOfLastScan
 }
 
-// GetSourcesRepository return the list of the repository where the issue/pr is referenced
+// GetSourcesRepository return the list of the repository where the issue/pr is referenced.
 func (t *trackBase) GetSourcesRepository() *[]GithubRepository {
 	return &t.SourcesRepository
 }
 
-// GetInstallationID return the installation id
+// GetInstallationID return the installation id.
 func (t *trackBase) GetInstallationID() int64 {
 	return t.InstallationID
 }
 
-// GetTargetRepository return the tracked repository
+// GetTargetRepository return the tracked repository.
 func (t *trackBase) GetTargetRepository() *GithubRepository {
 	return &t.TargetRepository
 }
 
-// GetStatus return the status of the issue/pr
+// GetStatus return the status of the issue/pr.
 func (t *trackBase) GetStatus() string {
 	return t.Status
 }
 
-// GetTitle return the title of the issue/pr
+// GetTitle return the title of the issue/pr.
 func (t *trackBase) GetTitle() string {
 	return t.Title
 }
 
-// GetCreateAt return the creation timestamp of the issue/pr
+// GetCreateAt return the creation timestamp of the issue/pr.
 func (t *trackBase) GetCreateAt() Timestamp {
 	return t.CreateAt
 }
 
-// GetUpdateAt return the last update timestamp of the issue/pr
+// GetUpdateAt return the last update timestamp of the issue/pr.
 func (t *trackBase) GetUpdateAt() Timestamp {
 	return t.UpdateAt
 }
 
-// GetClosedAt return the closed timestamp of the issue/pr
+// GetClosedAt return the closed timestamp of the issue/pr.
 func (t *trackBase) GetClosedAt() Timestamp {
 	return t.ClosedAt
 }
 
-// GetTimeline return the timeline of the issue/pr
+// GetTimeline return the timeline of the issue/pr.
 func (t *trackBase) GetTimeline() []GithubTimeline {
 	return t.Timeline
 }
@@ -275,13 +273,13 @@ type TrackPR struct {
 	IsMerged func() bool
 }
 
-// Init initialize the tracker
+// Init initialize the tracker.
 func Init(x zerolog.Logger) {
 	logger = x
 }
 
-// parseTrackIssueURL parse the TrackIssueURL and return the repoOwner, repoName, id and error
-func parseTrackIssueURL(TrackIssueURL string) (GithubRepository, error) {
+// parseTrackIssueURL parse the TrackIssueURL and return the repoOwner, repoName, id and error.
+func parseTrackIssueURL(trackIssueURL string) (GithubRepository, error) {
 	// The format of the TrackIssueURL is
 	// repoOwner/repoName#ID (ex: FrangipaneTeam/crown#1)
 	// or https://github.com/repoOwner/repoName/issues/ID (ex: https://github.com/FrangipaneTeam/crown/issues/140)
@@ -295,7 +293,7 @@ func parseTrackIssueURL(TrackIssueURL string) (GithubRepository, error) {
 
 	// Parse TrackIssueURL
 	for _, re := range regexS {
-		match := re.FindString(TrackIssueURL)
+		match := re.FindString(trackIssueURL)
 		m := common.ReSubMatchMap(re, match)
 		if len(m) == 0 {
 			continue
@@ -312,14 +310,12 @@ func parseTrackIssueURL(TrackIssueURL string) (GithubRepository, error) {
 			RepoName:  m["repoName"],
 			ID:        id,
 		}, nil
-
 	}
 
 	return GithubRepository{}, fmt.Errorf("unable to parse TrackIssueURL")
-
 }
 
-// sourceRepositoryAlreadyExist check if the source repository is already in the list
+// sourceRepositoryAlreadyExist check if the source repository is already in the list.
 func (t *trackBase) sourceRepositoryAlreadyExist(repoOwner, repoName string, issueID int64) bool {
 	for _, s := range t.SourcesRepository {
 		if s.RepoOwner == repoOwner && s.RepoName == repoName && s.ID == issueID {
@@ -329,8 +325,8 @@ func (t *trackBase) sourceRepositoryAlreadyExist(repoOwner, repoName string, iss
 	return false
 }
 
-// AddSourceRepository add a source repository to the track issue
-func (t *trackBase) AddSourceRepository(repoOwner string, repoName string, issueID int64) {
+// AddSourceRepository add a source repository to the track issue.
+func (t *trackBase) AddSourceRepository(repoOwner, repoName string, issueID int64) {
 	if !t.sourceRepositoryAlreadyExist(repoOwner, repoName, issueID) {
 		t.SourcesRepository = append(t.SourcesRepository, GithubRepository{
 			RepoOwner: repoOwner,

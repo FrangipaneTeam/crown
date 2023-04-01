@@ -28,8 +28,7 @@ type GHClient struct {
 	installationID int64
 }
 
-func NewGHClient(ctx context.Context, client *github.Client, event interface{}) *GHClient {
-
+func NewGHClient(ctx context.Context, _ *github.Client, event interface{}) *GHClient {
 	var ghClient *GHClient
 
 	switch event := event.(type) {
@@ -45,7 +44,9 @@ func NewGHClient(ctx context.Context, client *github.Client, event interface{}) 
 
 	ghClient.init()
 	ghClient.newContext(ctx)
-	ghClient.newGHClient()
+	if err := ghClient.newGHClient(); err != nil {
+		return nil
+	}
 
 	return ghClient
 }

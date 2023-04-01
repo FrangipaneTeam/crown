@@ -6,39 +6,35 @@ import (
 	"go.etcd.io/bbolt"
 )
 
-var (
-	DataBase *DB
-)
+var DataBase *DB
 
-type DbName string
+type Name string
 
 const (
-	DBTrack DbName = "Track"
-	DBEvent DbName = "Event"
+	DBTrack Name = "Track"
+	DBEvent Name = "Event"
 )
 
-var (
-	DbNames = []DbName{
-		DBTrack,
-		DBEvent,
-	}
-)
+var DBNames = []Name{
+	DBTrack,
+	DBEvent,
+}
 
 type DB struct {
 	*bbolt.DB
 }
 
 func NewDB(path string) error {
-	db, err := bbolt.Open(path, 0600, nil)
+	db, err := bbolt.Open(path, 0o600, nil)
 	if err != nil {
 		return err
 	}
 
 	if err := db.Update(func(tx *bbolt.Tx) error {
-		for _, name := range DbNames {
+		for _, name := range DBNames {
 			_, err := tx.CreateBucketIfNotExists([]byte(name))
 			if err != nil {
-				return fmt.Errorf("could not create %s bucket: %v", name, err)
+				return fmt.Errorf("could not create %s bucket: %w", name, err)
 			}
 		}
 		return nil
@@ -54,14 +50,14 @@ func (db *DB) Close() error {
 	return db.DB.Close()
 }
 
-// TrackDB Return the TrackDB
-func TrackDB() *DbName {
-	x := DbName(DBTrack)
+// TrackDB Return the TrackDB.
+func TrackDB() *Name {
+	x := Name(DBTrack) //nolint:unconvert
 	return &x
 }
 
 // Set sets the value for the given key.
-func (db *DbName) Set(key, value []byte) error {
+func (db *Name) Set(key, value []byte) error {
 	return DataBase.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(*db))
 		return b.Put(key, value)
@@ -69,7 +65,7 @@ func (db *DbName) Set(key, value []byte) error {
 }
 
 // Get gets the value for the given key.
-func (db *DbName) Get(key []byte) ([]byte, error) {
+func (db *Name) Get(key []byte) ([]byte, error) {
 	var value []byte
 	err := DataBase.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(*db))
@@ -79,8 +75,8 @@ func (db *DbName) Get(key []byte) ([]byte, error) {
 	return value, err
 }
 
-// KeyExists checks if the key exists
-func (db *DbName) KeyExists(key []byte) bool {
+// KeyExists checks if the key exists.
+func (db *Name) KeyExists(key []byte) bool {
 	var value []byte
 	err := DataBase.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(*db))
@@ -90,8 +86,8 @@ func (db *DbName) KeyExists(key []byte) bool {
 	return err == nil && value != nil
 }
 
-// GetAllKeys return all the keys
-func (db *DbName) GetAllKeys() ([]string, error) {
+// GetAllKeys return all the keys.
+func (db *Name) GetAllKeys() ([]string, error) {
 	var keys []string
 	err := DataBase.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(*db))
@@ -105,24 +101,24 @@ func (db *DbName) GetAllKeys() ([]string, error) {
 }
 
 // Delete deletes the value for the given key.
-func (db *DbName) Delete(key []byte) error {
+func (db *Name) Delete(key []byte) error {
 	return DataBase.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(*db))
 		return b.Delete(key)
 	})
 }
 
-// Byte Return []byte of the string
+// Byte Return []byte of the string.
 func Byte(s string) []byte {
 	return []byte(s)
 }
 
 // Client is a client for interacting with the database.
-func (db *DbName) Client() *bbolt.DB {
+func (db *Name) Client() *bbolt.DB {
 	return DataBase.DB
 }
 
-// Bucket return the bucket
-func (db *DbName) Bucket() string {
+// Bucket return the bucket.
+func (db *Name) Bucket() string {
 	return string(*db)
 }

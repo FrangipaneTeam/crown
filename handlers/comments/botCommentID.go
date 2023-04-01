@@ -5,13 +5,13 @@ import "fmt"
 type BotCommentID int
 
 const (
-	// ! Always add new IDs at the END of the list
+	// ! Always add new IDs at the END of the list.
 	IDIssuesTitleInvalid BotCommentID = 597659851 << iota
 	IDIssuesLabelNotExists
 	IDPRTitleInvalid
 	IDPRCommitInvalid
 	IDPRSizeTooBig
-	// ! Always add new IDs at the END of the list
+	// ! Always add new IDs at the END of the list.
 )
 
 // Int64 returns a pointer to the int64 value passed in.
@@ -27,17 +27,17 @@ func Int64Value(v *int64) int64 {
 	return 0
 }
 
-// IsValid returns true if the string passed in is equal to BotCommentID
+// IsValid returns true if the string passed in is equal to BotCommentID.
 func (c BotCommentID) IsValid(id string) bool {
-	return id == c.IdString()
+	return id == c.IDString()
 }
 
-// IdString return string value of BotCommentID
-func (c BotCommentID) IdString() string {
+// IdString return string value of BotCommentID.
+func (c BotCommentID) IDString() string {
 	return fmt.Sprint(c)
 }
 
-// Id return int value of BotCommentID
-func (c BotCommentID) Id() int {
+// Id return int value of BotCommentID.
+func (c BotCommentID) ID() int {
 	return int(c)
 }

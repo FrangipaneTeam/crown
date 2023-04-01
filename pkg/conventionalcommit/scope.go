@@ -7,7 +7,6 @@ import (
 
 // commitScope returns the scope of the commit.
 func (l *Cc) commitScope() error {
-
 	if l.Scope() == "" {
 		l.CommitScope = ""
 		return nil
@@ -23,7 +22,6 @@ func (l *Cc) commitScope() error {
 	l.CommitScope = CommitScope(matches[0])
 
 	return nil
-
 }
 
 // GetScope returns the scope of the commit.

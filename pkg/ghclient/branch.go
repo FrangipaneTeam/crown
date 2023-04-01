@@ -6,7 +6,7 @@ import (
 
 //go:generate mockgen -source=branch.go -destination=branch_mock.go -package=ghclient
 
-// BranchRequiredStatusChecks represents the required status checks for a branch
+// BranchRequiredStatusChecks represents the required status checks for a branch.
 func (g *GHClient) BranchRequiredStatusChecks(requiredStatusCheck []*github.RequiredStatusCheck) error {
 	_, _, err := g.client.Repositories.UpdateBranchProtection(
 		g.context,
@@ -19,5 +19,4 @@ func (g *GHClient) BranchRequiredStatusChecks(requiredStatusCheck []*github.Requ
 			},
 		})
 	return err
-
 }

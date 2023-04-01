@@ -4,25 +4,23 @@ import (
 	"errors"
 	"regexp"
 
+	"github.com/google/go-github/v47/github"
+
 	"github.com/FrangipaneTeam/crown/pkg/ghclient"
 	"github.com/FrangipaneTeam/crown/pkg/tracker"
-	"github.com/google/go-github/v47/github"
 )
 
 const (
 	labelCategoryColor = "BFD4F2"
 
-	startChar = "/"
-	labelCmd  = "label"
-	trackCmd  = "track"
+	labelCmd = "label"
+	trackCmd = "track"
 
 	addVerb    = "add"
 	removeVerb = "remove"
 )
 
-var (
-	slashcommandRe = regexp.MustCompile(`/(\w+):(\w+)\s+(\S+)`)
-)
+var slashcommandRe = regexp.MustCompile(`/(\w+):(\w+)\s+(\S+)`)
 
 type SlashCommand struct {
 	Command string
@@ -45,7 +43,7 @@ func FindSlashCommand(body string) (bool, interface{}, error) {
 		if err != nil {
 			return false, nil, err
 		}
-		return true, SlashCommandLabel{
+		return true, Label{
 			Action: CommandLabel,
 			Verb:   v,
 			Label:  cmd[3],
@@ -64,7 +62,7 @@ func FindSlashCommand(body string) (bool, interface{}, error) {
 }
 
 // ExecuteSlashCommand executes slash command.
-// Deprecated
+// Deprecated.
 func ExecuteSlashCommand(ghc *ghclient.GHClient, cmd *SlashCommand) error {
 	switch cmd.Command {
 	case labelCmd:
@@ -88,7 +86,10 @@ func ExecuteSlashCommand(ghc *ghclient.GHClient, cmd *SlashCommand) error {
 				return err
 			}
 
-			ghc.AddLabelToIssue(cmd.Desc)
+			if err := ghc.AddLabelToIssue(cmd.Desc); err != nil {
+				ghc.Logger.Err(err).Msg("failed to add label")
+				return err
+			}
 
 		case removeVerb:
 			if err := ghc.RemoveLabelsForIssue([]string{cmd.Desc}); err != nil {
@@ -102,10 +103,9 @@ func ExecuteSlashCommand(ghc *ghclient.GHClient, cmd *SlashCommand) error {
 				ghc.Logger.Err(err).Msg("failed to add reaction")
 				return err
 			}
-
 		}
 	case trackCmd:
-		switch cmd.Verb {
+		switch cmd.Verb { //nolint:gocritic
 		case addVerb:
 
 			if err := tracker.TrackNewIssue(ghc.GetRepoOwner(), ghc.GetRepoName(), ghc.GetInstallationID(), cmd.IssueID, cmd.Desc); err != nil {
@@ -113,13 +113,12 @@ func ExecuteSlashCommand(ghc *ghclient.GHClient, cmd *SlashCommand) error {
 					ghc.Logger.Err(err).Msg("failed to add reaction")
 				}
 				return err
-			} else {
-				if err := ghc.AddCommentReaction(cmd.IssueID, "+1"); err != nil {
-					ghc.Logger.Err(err).Msg("failed to add reaction")
-					return err
-				}
 			}
 
+			if err := ghc.AddCommentReaction(cmd.IssueID, "+1"); err != nil {
+				ghc.Logger.Err(err).Msg("failed to add reaction")
+				return err
+			}
 		}
 	}
 	return nil

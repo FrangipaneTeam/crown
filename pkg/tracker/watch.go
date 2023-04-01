@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/FrangipaneTeam/crown/pkg/db"
 	"go.etcd.io/bbolt"
+
+	"github.com/FrangipaneTeam/crown/pkg/db"
 )
 
 const (
@@ -15,9 +16,8 @@ const (
 
 // Watch is watcher of the issue/pr
 // It is responsible for scanning the issue/pr
-// and updating the database
+// and updating the database.
 func Watch() {
-
 	for {
 		logger.Trace().Msg("Start watching")
 		// Get all the repos
@@ -29,7 +29,11 @@ func Watch() {
 			for k, v := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, v = c.Next() {
 				// For each issue
 				var x trackBase
-				json.Unmarshal(v, &x)
+				err := json.Unmarshal(v, &x)
+				if err != nil {
+					logger.Error().Err(err).Msgf("Error while unmarshaling issue %s", k)
+					return err
+				}
 
 				issue := &TrackIssue{
 					base: x,
@@ -56,7 +60,6 @@ func Watch() {
 
 			return nil
 		})
-
 		if err != nil {
 			logger.Error().Err(err).Msg("Error while watching")
 		}

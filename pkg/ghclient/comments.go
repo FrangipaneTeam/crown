@@ -34,7 +34,6 @@ func (g *GHClient) DeleteComment(commentID int64) error {
 
 // EditComment edits a comment on the issue.
 func (g *GHClient) EditComment(commentID int64, comment github.IssueComment) error {
-
 	_, _, err := g.client.Issues.EditComment(g.context, g.repoOwner, g.repoName, commentID, &comment)
 	if err != nil {
 		return err
