@@ -11,7 +11,7 @@ require (
 	github.com/palantir/go-githubapp v0.14.0
 	github.com/pkg/errors v0.9.1
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
-	github.com/rs/zerolog v1.28.0
+	github.com/rs/zerolog v1.29.1
 	go.etcd.io/bbolt v1.3.6
 	gopkg.in/yaml.v3 v3.0.1
 )
